@@ -21,7 +21,6 @@ import {
   X,
   Dumbbell,
   Receipt,
-  Sparkles,
   Smartphone,
   ExternalLink,
   ChevronRight
@@ -47,7 +46,6 @@ export default function DashboardLayout({
     if (sName) setSucursalNombre(sName);
     if (sId) setSucursalId(sId);
 
-    // Obtener sesión
     fetch("/api/auth/get-session", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
@@ -83,7 +81,6 @@ export default function DashboardLayout({
     { href: "/dashboard/configuracion", label: "Configuración & Sedes", icon: Settings },
   ];
 
-  // Helper para breadcrumb
   const currentNav = navItems.find((n) => n.href === pathname) || { label: "Gestión" };
 
   return (
@@ -92,180 +89,159 @@ export default function DashboardLayout({
       {/* Mobile Topbar */}
       <div className="md:hidden bg-slate-950 border-b border-slate-800 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold shadow-xs">
             <Dumbbell className="h-4 w-4" />
           </div>
           <div>
             <span className="font-bold text-sm tracking-tight text-white">GymLink</span>
-            <span className="ml-1 text-[10px] bg-slate-800 text-slate-300 font-semibold px-1.5 py-0.5 rounded border border-slate-700">PRO</span>
+            <span className="ml-1 text-[10px] bg-cyan-950/80 text-cyan-300 font-semibold px-1.5 py-0.5 rounded border border-cyan-800/60">PRO</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/molinete"
-            target="_blank"
-            className="p-1.5 bg-slate-900 border border-slate-800 text-indigo-400 rounded-lg text-xs"
-            title="Pantalla de Molinete"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Link>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900"
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+        >
+          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
 
-      {/* Sidebar Desktop & Mobile Drawer */}
+      {/* Sidebar Desktop (Linear style deep navy with ocean/cyan highlights) */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800/80 z-50 transition-transform duration-200 md:translate-x-0 ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`${
+          mobileMenuOpen ? "block" : "hidden"
+        } md:flex flex-col w-full md:w-64 bg-slate-950 border-r border-slate-800/90 text-slate-300 flex-shrink-0 z-30 md:sticky md:top-0 md:h-screen`}
       >
-        {/* Brand & Sede Selector */}
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
-                <Dumbbell className="h-4 w-4" />
-              </div>
-              <div>
-                <h1 className="text-sm font-bold tracking-tight text-white leading-none">GymLink</h1>
-                <span className="text-[10px] text-slate-500 font-medium">Enterprise Backoffice</span>
-              </div>
+        {/* Brand Header */}
+        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+          <Link href="/dashboard" className="flex items-center gap-2.5 group">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-cyan-600 via-sky-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-xs shadow-cyan-500/20">
+              <Dumbbell className="h-4 w-4" />
             </div>
-
-            <span className="text-[9px] bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-mono font-bold px-1.5 py-0.5 rounded">
-              v2.5
-            </span>
-          </div>
-
-          {/* Sede Activa Switcher */}
-          <Link
-            href="/seleccionar-sucursal"
-            onClick={() => setMobileMenuOpen(false)}
-            className="group flex items-center justify-between p-2.5 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-lg transition"
-            title="Cambiar sede de operación"
-          >
-            <div className="flex items-center gap-2 truncate">
-              <MapPin className="h-3.5 w-3.5 text-indigo-400 flex-shrink-0" />
-              <div className="truncate">
-                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Sede Activa</span>
-                <span className="text-xs font-semibold text-slate-200 truncate block">{sucursalNombre}</span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-sm text-white tracking-tight leading-none">GymLink</span>
+                <span className="text-[9px] bg-cyan-950/90 text-cyan-300 font-bold px-1.5 py-0.2 rounded border border-cyan-700/60 uppercase">PRO</span>
               </div>
+              <span className="text-[11px] text-slate-400 font-medium">Gestión & Molinetes</span>
             </div>
-            <ChevronDown className="h-3.5 w-3.5 text-slate-500 group-hover:text-slate-300 flex-shrink-0 transition" />
           </Link>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 overflow-y-auto px-3 space-y-0.5 scrollbar-thin">
-          <div className="px-2 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Módulos Principales
-          </div>
+        {/* Current Active Branch Indicator */}
+        <div className="px-3 pt-3 pb-1">
+          <Link
+            href="/seleccionar-sucursal"
+            className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/40 text-xs transition group"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <MapPin className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+              <div className="truncate">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block leading-none">Sede en operación</span>
+                <span className="text-xs font-bold text-white truncate block mt-0.5">{sucursalNombre}</span>
+              </div>
+            </div>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-500 group-hover:text-cyan-400 transition flex-shrink-0" />
+          </Link>
+        </div>
 
+        {/* Navigation Menu */}
+        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Módulos</div>
+          
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href));
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition font-medium ${
+                className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   isActive
-                    ? "bg-indigo-600 text-white font-semibold shadow-xs"
-                    : "text-slate-400 hover:text-slate-100 hover:bg-slate-900/70"
+                    ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold shadow-xs shadow-cyan-600/30"
+                    : "text-slate-300 hover:text-white hover:bg-slate-900"
                 }`}
               >
-                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
+                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? "text-white" : "text-slate-400 group-hover:text-cyan-400"}`} />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
 
-          <div className="pt-3 px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Accesos Rápidos
-          </div>
-
+          <div className="pt-3 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Terminal</div>
           <Link
             href="/molinete"
             target="_blank"
-            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-900/70 transition font-medium"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-cyan-300 bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-800/50 transition"
           >
-            <div className="flex items-center gap-2.5">
-              <Activity className="h-4 w-4 text-emerald-400" />
-              <span>Pantalla Molinete</span>
+            <div className="flex items-center gap-2 truncate">
+              <ExternalLink className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Abrir Molinete</span>
             </div>
-            <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+            <span className="text-[9px] bg-cyan-900/60 text-cyan-200 px-1.5 py-0.5 rounded font-mono font-bold">5m</span>
           </Link>
         </nav>
 
-        {/* Footer Sidebar & User */}
+        {/* Sidebar Footer / User Profile */}
         <div className="p-3 border-t border-slate-800/80 space-y-2">
-          <div className="p-2.5 bg-slate-900/80 rounded-lg border border-slate-800/60 flex items-center justify-between">
-            <div className="flex items-center gap-2 truncate">
-              <div className="h-7 w-7 rounded-md bg-slate-800 text-slate-200 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                {userName.charAt(0)}
+          <PWAInstallPrompt variant="sidebar" appName="GymLink Admin" />
+
+          <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800/60">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-md bg-gradient-to-br from-cyan-700 to-blue-800 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                {userName.charAt(0).toUpperCase()}
               </div>
               <div className="truncate">
-                <p className="text-xs font-semibold text-slate-200 truncate">{userName}</p>
-                <span className="text-[10px] text-slate-500 font-mono block">{userRole}</span>
+                <p className="text-xs font-semibold text-white truncate leading-tight">{userName}</p>
+                <p className="text-[10px] text-cyan-400 font-mono leading-none">{userRole}</p>
               </div>
             </div>
 
             <button
               onClick={handleLogout}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md transition"
+              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
               title="Cerrar sesión"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Overlay Mobile */}
-      {mobileMenuOpen && (
-        <div
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden"
-        />
-      )}
-
-      {/* Main Workspace Surface */}
+      {/* Main Content Surface */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* Topbar Header */}
-        <header className="hidden md:flex items-center justify-between bg-white border-b border-slate-200/80 px-6 py-3 sticky top-0 z-30">
+        {/* Top Header / Breadcrumbs */}
+        <header className="bg-white border-b border-slate-200/90 px-4 sm:px-6 py-2.5 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400 font-medium">GymLink</span>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-            <span className="text-slate-900 font-semibold">{currentNav.label}</span>
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+            <Link href="/dashboard" className="text-slate-600 hover:text-cyan-700 transition">
+              Dashboard
+            </Link>
+            {pathname !== "/dashboard" && (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <span className="text-slate-900 font-bold">{currentNav.label}</span>
+              </>
+            )}
           </div>
 
-          {/* Quick Actions & Sede Pill */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-md text-xs text-slate-700">
-              <MapPin className="h-3.5 w-3.5 text-indigo-600" />
-              <span className="font-medium">{sucursalNombre}</span>
+          {/* Right Header Status */}
+          <div className="flex items-center gap-2.5">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-cyan-50 text-cyan-900 border border-cyan-200 text-xs font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+              <span>{sucursalNombre}</span>
             </div>
 
             <Link
-              href="/molinete"
-              target="_blank"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-medium transition"
+              href="/dashboard/configuracion"
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition"
+              title="Configuración"
             >
-              <Activity className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Molinete</span>
+              <Settings className="h-4 w-4" />
             </Link>
-
-            <PWAInstallPrompt variant="button" appName="GymLink Admin" />
           </div>
         </header>
 

@@ -208,15 +208,15 @@ export default function ClienteDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-80 space-y-3">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        <p className="text-xs font-medium text-slate-500">Cargando ficha 360 del socio...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
+        <p className="text-xs font-semibold text-slate-600">Cargando ficha 360 del socio...</p>
       </div>
     );
   }
 
   if (!cliente) {
     return (
-      <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-center text-xs font-semibold">
+      <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-center text-xs font-semibold">
         Socio no encontrado.
       </div>
     );
@@ -264,7 +264,7 @@ export default function ClienteDetailPage() {
           <div className="flex items-center gap-4">
             <button 
               onClick={() => router.back()} 
-              className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition shadow-2xs flex-shrink-0"
+              className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shadow-2xs flex-shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -277,7 +277,7 @@ export default function ClienteDetailPage() {
                   className="w-14 h-14 rounded-lg object-cover border border-slate-200"
                 />
               ) : (
-                <div className="w-14 h-14 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg border border-slate-200">
+                <div className="w-14 h-14 rounded-lg bg-cyan-50 text-cyan-800 flex items-center justify-center font-bold text-lg border border-cyan-200">
                   {cliente.nombre.charAt(0)}{cliente.apellido.charAt(0)}
                 </div>
               )}
@@ -289,18 +289,18 @@ export default function ClienteDetailPage() {
                   {cliente.nombre} {cliente.apellido}
                 </h2>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                     estaAlDia
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-rose-50 text-rose-700 border-rose-200"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                      : "bg-rose-50 text-rose-800 border-rose-300"
                   }`}
                 >
                   {estaAlDia ? `● Al Día (${diasRestantes}d)` : "● Vencido"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-0.5">
-                <span className="font-mono">DNI: <strong className="text-slate-800">{cliente.documento}</strong></span>
+              <div className="flex items-center gap-3 text-xs text-slate-600 font-medium mt-0.5">
+                <span className="font-mono">DNI: <strong className="text-slate-900">{cliente.documento}</strong></span>
                 {cliente.telefono && <span>📞 {cliente.telefono}</span>}
                 {cliente.email && <span>✉️ {cliente.email}</span>}
               </div>
@@ -317,7 +317,7 @@ export default function ClienteDetailPage() {
                   setMontoRenovacion(String(membresiasDisponibles[0].precio));
                 }
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span>Renovar Membresía</span>
@@ -328,10 +328,10 @@ export default function ClienteDetailPage() {
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition"
                 title="Enviar recordatorio por WhatsApp"
               >
-                <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                <MessageCircle className="h-3.5 w-3.5 text-emerald-700" />
                 <span>WhatsApp</span>
               </a>
             )}
@@ -339,10 +339,10 @@ export default function ClienteDetailPage() {
             <button
               onClick={handleResetPassword}
               disabled={resettingPwd}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium shadow-2xs transition"
               title="Resetear clave del portal a 123456"
             >
-              <KeyRound className="h-3.5 w-3.5 text-slate-500" />
+              <KeyRound className="h-3.5 w-3.5 text-slate-600" />
               <span>Reset Clave</span>
             </button>
           </div>
@@ -350,40 +350,40 @@ export default function ClienteDetailPage() {
 
         {/* KPI Mini-Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-          <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Plan Vigente</span>
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Plan Vigente</span>
             <p className="text-xs font-bold text-slate-900 mt-0.5 truncate">{ultimoPago?.membresia?.nombre || "Sin Plan"}</p>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-slate-600 font-medium">
               Vence: {fechaVencimiento ? formatDate(fechaVencimiento.toISOString()) : "—"}
             </span>
           </div>
 
-          <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Saldo Cuenta Corriente</span>
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Saldo Cuenta Corriente</span>
             <p className={`text-xs font-bold font-mono mt-0.5 tabular-nums ${saldoDeudor > 0 ? "text-rose-600" : "text-slate-900"}`}>
               {formatMoney(saldoDeudor)}
             </p>
-            <span className="text-[10px] text-slate-500">Deuda acumulada</span>
+            <span className="text-[10px] text-slate-600 font-medium">Deuda acumulada</span>
           </div>
 
-          <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Crédito Disponible</span>
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Crédito Disponible</span>
             <p className="text-xs font-bold font-mono text-slate-900 mt-0.5 tabular-nums">{formatMoney(creditoDisponible)}</p>
-            <span className="text-[10px] text-slate-500">Límite: {formatMoney(limiteCredito)}</span>
+            <span className="text-[10px] text-slate-600 font-medium">Límite: {formatMoney(limiteCredito)}</span>
           </div>
 
-          <div className="p-3 bg-slate-50/70 rounded-lg border border-slate-200/80">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Total Visitas</span>
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total Visitas</span>
             <p className="text-xs font-bold text-slate-900 mt-0.5">{cliente.ingresos?.length || 0} ingresos</p>
-            <span className="text-[10px] text-slate-500">Registros en molinete</span>
+            <span className="text-[10px] text-slate-600 font-medium">Registros en molinete</span>
           </div>
         </div>
       </div>
 
       {/* Alertas */}
       {msg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" />
+        <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-700" />
           <span>{msg.text}</span>
         </div>
       )}
@@ -394,11 +394,11 @@ export default function ClienteDetailPage() {
           onClick={() => setActiveTab("membresias")}
           className={`flex-1 py-1.5 px-3 rounded-md transition flex items-center justify-center gap-1.5 ${
             activeTab === "membresias"
-              ? "bg-white text-slate-900 font-semibold shadow-xs"
+              ? "bg-white text-slate-900 font-bold shadow-xs border border-slate-200/80"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <CreditCard className="w-3.5 h-3.5" />
+          <CreditCard className="w-3.5 h-3.5 text-cyan-600" />
           <span>Membresías & Cuotas</span>
         </button>
 
@@ -406,11 +406,11 @@ export default function ClienteDetailPage() {
           onClick={() => setActiveTab("cuenta")}
           className={`flex-1 py-1.5 px-3 rounded-md transition flex items-center justify-center gap-1.5 ${
             activeTab === "cuenta"
-              ? "bg-white text-slate-900 font-semibold shadow-xs"
+              ? "bg-white text-slate-900 font-bold shadow-xs border border-slate-200/80"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Receipt className="w-3.5 h-3.5" />
+          <Receipt className="w-3.5 h-3.5 text-cyan-600" />
           <span>Cuenta Corriente</span>
         </button>
 
@@ -418,11 +418,11 @@ export default function ClienteDetailPage() {
           onClick={() => setActiveTab("datos")}
           className={`flex-1 py-1.5 px-3 rounded-md transition flex items-center justify-center gap-1.5 ${
             activeTab === "datos"
-              ? "bg-white text-slate-900 font-semibold shadow-xs"
+              ? "bg-white text-slate-900 font-bold shadow-xs border border-slate-200/80"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <User className="w-3.5 h-3.5" />
+          <User className="w-3.5 h-3.5 text-cyan-600" />
           <span>Datos & Foto</span>
         </button>
 
@@ -430,11 +430,11 @@ export default function ClienteDetailPage() {
           onClick={() => setActiveTab("asistencias")}
           className={`flex-1 py-1.5 px-3 rounded-md transition flex items-center justify-center gap-1.5 ${
             activeTab === "asistencias"
-              ? "bg-white text-slate-900 font-semibold shadow-xs"
+              ? "bg-white text-slate-900 font-bold shadow-xs border border-slate-200/80"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          <Activity className="w-3.5 h-3.5" />
+          <Activity className="w-3.5 h-3.5 text-cyan-600" />
           <span>Asistencias ({cliente.ingresos?.length || 0})</span>
         </button>
       </div>
@@ -452,7 +452,7 @@ export default function ClienteDetailPage() {
                   setMontoRenovacion(String(membresiasDisponibles[0].precio));
                 }
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-semibold transition"
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-xs font-semibold transition"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Cobrar Cuota</span>
@@ -461,7 +461,7 @@ export default function ClienteDetailPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-2.5">Fecha Pago</th>
                   <th className="px-4 py-2.5">Plan</th>
@@ -474,20 +474,20 @@ export default function ClienteDetailPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {cliente.pagos?.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500 font-medium">
                       Sin membresías cargadas.
                     </td>
                   </tr>
                 ) : (
                   cliente.pagos.map((p: any) => (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{formatDate(p.fechaPago)}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-900">{p.membresia?.nombre || "General"}</td>
+                      <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{formatDate(p.fechaPago)}</td>
+                      <td className="px-4 py-2.5 font-semibold text-slate-900">{p.membresia?.nombre || "General"}</td>
                       <td className="px-4 py-2.5 font-medium text-slate-700">{formatDate(p.fechaVencimiento)}</td>
-                      <td className="px-4 py-2.5 uppercase font-mono text-[10px] text-slate-500">{p.metodoPago || "Efectivo"}</td>
+                      <td className="px-4 py-2.5 uppercase font-mono text-[10px] text-slate-600 font-semibold">{p.metodoPago || "Efectivo"}</td>
                       <td className="px-4 py-2.5 text-right font-bold font-mono text-slate-900 tabular-nums">{formatMoney(Number(p.monto))}</td>
                       <td className="px-4 py-2.5 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                           ● Pagado
                         </span>
                       </td>
@@ -506,13 +506,13 @@ export default function ClienteDetailPage() {
           <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Gestión de Cuenta Corriente</h3>
-              <p className="text-xs text-slate-500">Abonos, cargos y ajuste de crédito autorizado</p>
+              <p className="text-xs text-slate-600">Abonos, cargos y ajuste de crédito autorizado</p>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setShowModalCuenta("pago"); setMontoCuenta(""); setConceptoCuenta(""); }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition"
               >
                 <ArrowDownRight className="w-3.5 h-3.5" />
                 <span>Abonar Pago</span>
@@ -520,7 +520,7 @@ export default function ClienteDetailPage() {
 
               <button
                 onClick={() => { setShowModalCuenta("cargo"); setMontoCuenta(""); setConceptoCuenta(""); }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold transition"
               >
                 <ArrowUpRight className="w-3.5 h-3.5" />
                 <span>Cargar Deuda</span>
@@ -528,9 +528,9 @@ export default function ClienteDetailPage() {
 
               <button
                 onClick={() => { setShowModalCuenta("limite"); setMontoCuenta(String(limiteCredito)); }}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-medium transition"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-medium shadow-2xs transition"
               >
-                <Settings className="w-3.5 h-3.5 text-slate-500" />
+                <Settings className="w-3.5 h-3.5 text-slate-600" />
                 <span>Límite</span>
               </button>
             </div>
@@ -543,7 +543,7 @@ export default function ClienteDetailPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-2.5">Fecha</th>
                     <th className="px-4 py-2.5">Tipo</th>
@@ -554,7 +554,7 @@ export default function ClienteDetailPage() {
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {cliente.cuentaCorriente?.movimientos?.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-medium">
+                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500 font-medium">
                         Sin movimientos registrados.
                       </td>
                     </tr>
@@ -563,19 +563,19 @@ export default function ClienteDetailPage() {
                       const esCargo = m.tipo === "cargo";
                       return (
                         <tr key={m.id} className="hover:bg-slate-50/70 transition">
-                          <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{formatDateTime(m.fecha)}</td>
+                          <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{formatDateTime(m.fecha)}</td>
                           <td className="px-4 py-2.5">
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 esCargo
-                                  ? "bg-rose-50 text-rose-700 border-rose-200"
-                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  ? "bg-rose-50 text-rose-800 border-rose-300"
+                                  : "bg-emerald-50 text-emerald-800 border-emerald-300"
                               }`}
                             >
                               {esCargo ? "● Cargo" : "● Abono"}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 font-medium text-slate-900">{m.concepto || "—"}</td>
+                          <td className="px-4 py-2.5 font-semibold text-slate-900">{m.concepto || "—"}</td>
                           <td className={`px-4 py-2.5 text-right font-bold font-mono tabular-nums ${esCargo ? "text-rose-600" : "text-emerald-700"}`}>
                             {esCargo ? `+ ${formatMoney(Number(m.monto))}` : `- ${formatMoney(Number(m.monto))}`}
                           </td>
@@ -595,15 +595,15 @@ export default function ClienteDetailPage() {
         <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <User className="h-4 w-4 text-indigo-600" />
+              <User className="h-4 w-4 text-cyan-600" />
               Editar Información Personal
             </h3>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500">
               Registrado el {formatDate(cliente.fechaRegistro)}
             </span>
           </div>
 
-          <div className="flex items-center gap-4 p-4 bg-slate-50/70 rounded-lg border border-slate-200/80">
+          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
             <div className="relative flex-shrink-0">
               {fotoBase64 ? (
                 <img
@@ -612,22 +612,22 @@ export default function ClienteDetailPage() {
                   className="w-16 h-16 rounded-lg object-cover border border-slate-200"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg border border-slate-200">
+                <div className="w-16 h-16 rounded-lg bg-cyan-50 text-cyan-800 flex items-center justify-center font-bold text-lg border border-cyan-200">
                   {cliente.nombre.charAt(0)}{cliente.apellido.charAt(0)}
                 </div>
               )}
             </div>
 
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-900">Foto para Reconocimiento</p>
-              <p className="text-[11px] text-slate-500">Visible en pantalla de molinete y credencial del socio.</p>
+              <p className="text-xs font-bold text-slate-900">Foto para Reconocimiento</p>
+              <p className="text-[11px] text-slate-600">Visible en pantalla de molinete y credencial del socio.</p>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md text-xs font-medium shadow-2xs transition"
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 rounded-md text-xs font-medium shadow-2xs transition"
               >
-                <Camera className="h-3.5 w-3.5 text-slate-500" />
+                <Camera className="h-3.5 w-3.5 text-cyan-600" />
                 <span>{fotoBase64 ? "Cambiar Foto" : "Subir Foto"}</span>
               </button>
             </div>
@@ -635,38 +635,38 @@ export default function ClienteDetailPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Nombre</label>
+              <label className="block font-bold text-slate-700 mb-1">Nombre</label>
               <input
                 value={form.nombre || ""}
                 onChange={e => setForm({ ...form, nombre: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Apellido</label>
+              <label className="block font-bold text-slate-700 mb-1">Apellido</label>
               <input
                 value={form.apellido || ""}
                 onChange={e => setForm({ ...form, apellido: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">DNI (Documento)</label>
+              <label className="block font-bold text-slate-700 mb-1">DNI (Documento)</label>
               <input
                 value={form.documento || ""}
                 onChange={e => setForm({ ...form, documento: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-mono font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Estado</label>
+              <label className="block font-bold text-slate-700 mb-1">Estado</label>
               <select
                 value={form.estado || "activo"}
                 onChange={e => setForm({ ...form, estado: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-semibold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               >
                 <option value="activo">Activo (Habilitado)</option>
                 <option value="inactivo">Inactivo (Bloqueado)</option>
@@ -674,30 +674,30 @@ export default function ClienteDetailPage() {
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Teléfono / WhatsApp</label>
+              <label className="block font-bold text-slate-700 mb-1">Teléfono / WhatsApp</label>
               <input
                 value={form.telefono || ""}
                 onChange={e => setForm({ ...form, telefono: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none font-mono"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Email</label>
+              <label className="block font-bold text-slate-700 mb-1">Email</label>
               <input
                 type="email"
                 value={form.email || ""}
                 onChange={e => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block font-medium text-slate-700 mb-1">Dirección</label>
+              <label className="block font-bold text-slate-700 mb-1">Dirección</label>
               <input
                 value={form.direccion || ""}
                 onChange={e => setForm({ ...form, direccion: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
               />
             </div>
           </div>
@@ -706,7 +706,7 @@ export default function ClienteDetailPage() {
             <button
               onClick={handleSaveDatos}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-2xs disabled:opacity-50 transition"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 transition"
             >
               <Save className="h-3.5 w-3.5" />
               <span>{saving ? "Guardando..." : "Guardar Cambios"}</span>
@@ -720,12 +720,12 @@ export default function ClienteDetailPage() {
         <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Historial de Asistencias</h3>
-            <span className="text-xs text-slate-500">{cliente.ingresos?.length || 0} registros</span>
+            <span className="text-xs text-slate-600 font-medium">{cliente.ingresos?.length || 0} registros</span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-2.5">Fecha</th>
                   <th className="px-4 py-2.5">Entrada</th>
@@ -737,32 +737,32 @@ export default function ClienteDetailPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {cliente.ingresos?.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500 font-medium">
                       Sin ingresos registrados.
                     </td>
                   </tr>
                 ) : (
                   cliente.ingresos.map((i: any) => (
                     <tr key={i.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{formatDate(i.fechaHora)}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-900 font-mono text-[11px]">
+                      <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{formatDate(i.fechaHora)}</td>
+                      <td className="px-4 py-2.5 font-semibold text-slate-900 font-mono text-[11px]">
                         {new Date(i.fechaHora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">
+                      <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">
                         {i.horaSalida ? new Date(i.horaSalida).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "—"}
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         {i.duracionMinutos ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px]">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-mono text-[10px] font-semibold border border-slate-200">
+                            <Clock className="w-3 h-3 text-cyan-600" />
                             {i.duracionMinutos} min
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">En curso</span>
+                          <span className="text-slate-500 text-[11px] font-medium">En curso</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                           ● OK
                         </span>
                       </td>
@@ -777,21 +777,21 @@ export default function ClienteDetailPage() {
 
       {/* Modal Renovar Membresía */}
       {showModalRenovar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <Sparkles className="w-4 h-4 text-cyan-600" />
                 <h3 className="text-sm font-bold text-slate-900">Renovar / Cobrar Membresía</h3>
               </div>
-              <button onClick={() => setShowModalRenovar(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModalRenovar(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleEjecutarRenovacion} className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Plan de Membresía *</label>
+                <label className="block font-bold text-slate-700 mb-1">Plan de Membresía *</label>
                 <select
                   value={selectedMembresiaId}
                   onChange={(e) => {
@@ -801,7 +801,7 @@ export default function ClienteDetailPage() {
                     if (sel) setMontoRenovacion(String(sel.precio));
                   }}
                   required
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 font-semibold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                 >
                   {membresiasDisponibles.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -813,11 +813,11 @@ export default function ClienteDetailPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Forma de Pago</label>
+                  <label className="block font-bold text-slate-700 mb-1">Forma de Pago</label>
                   <select
                     value={metodoPagoRenovacion}
                     onChange={(e) => setMetodoPagoRenovacion(e.target.value)}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   >
                     <option value="efectivo">Efectivo</option>
                     <option value="transferencia">Transferencia</option>
@@ -827,14 +827,14 @@ export default function ClienteDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Monto ($) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Monto ($) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={montoRenovacion}
                     onChange={(e) => setMontoRenovacion(e.target.value)}
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -844,21 +844,21 @@ export default function ClienteDetailPage() {
                   type="checkbox"
                   checked={extenderDesdeVencimiento}
                   onChange={(e) => setExtenderDesdeVencimiento(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                  className="rounded text-cyan-600 focus:ring-cyan-500 h-4 w-4"
                 />
-                <span className="text-[11px] text-slate-600">
+                <span className="text-[11px] text-slate-700 font-medium">
                   Extender vigencia a partir del vencimiento actual (si aún no vence)
                 </span>
               </label>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Notas (Opcional)</label>
+                <label className="block font-bold text-slate-700 mb-1">Notas (Opcional)</label>
                 <input
                   type="text"
                   value={notasRenovacion}
                   onChange={(e) => setNotasRenovacion(e.target.value)}
                   placeholder="Ej: Pago en mostrador"
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                 />
               </div>
 
@@ -866,14 +866,14 @@ export default function ClienteDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowModalRenovar(false)}
-                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={procesandoRenovacion}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-semibold shadow-2xs transition disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg py-2 text-xs font-semibold shadow-xs transition disabled:opacity-50"
                 >
                   {procesandoRenovacion ? "Procesando..." : "Confirmar Renovación"}
                 </button>
@@ -885,7 +885,7 @@ export default function ClienteDetailPage() {
 
       {/* Modal Cuenta Corriente */}
       {showModalCuenta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
@@ -893,14 +893,14 @@ export default function ClienteDetailPage() {
                 {showModalCuenta === "cargo" && "Registrar Cargo en Cuenta"}
                 {showModalCuenta === "limite" && "Configurar Límite de Crédito"}
               </h3>
-              <button onClick={() => setShowModalCuenta(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModalCuenta(null)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Monto ($) *</label>
+                <label className="block font-bold text-slate-700 mb-1">Monto ($) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -909,19 +909,19 @@ export default function ClienteDetailPage() {
                   value={montoCuenta}
                   onChange={(e) => setMontoCuenta(e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 text-base font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 text-base font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                 />
               </div>
 
               {showModalCuenta !== "limite" && (
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Concepto / Motivo</label>
+                  <label className="block font-bold text-slate-700 mb-1">Concepto / Motivo</label>
                   <input
                     type="text"
                     value={conceptoCuenta}
                     onChange={(e) => setConceptoCuenta(e.target.value)}
                     placeholder="Ej: Pago parcial en efectivo..."
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-2 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
               )}
@@ -930,14 +930,14 @@ export default function ClienteDetailPage() {
             <div className="flex gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowModalCuenta(null)}
-                className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleEjecutarCuenta}
                 disabled={procesandoCuenta || !montoCuenta}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-semibold shadow-2xs transition disabled:opacity-50"
+                className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg py-2 text-xs font-semibold shadow-xs transition disabled:opacity-50"
               >
                 {procesandoCuenta ? "Procesando..." : "Confirmar"}
               </button>

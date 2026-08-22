@@ -99,7 +99,12 @@ export default function CajaPage() {
 
   const loadProductos = async (sucId = activeSucursal, cat = categoriaSeleccionada, q = buscarProducto) => {
     setLoadingProductos(true);
-    const res = await getProductosPOS(sucId, cat, q);
+    const res = await getProductosPOS(
+      sucId,
+      cat === "todas" ? undefined : cat,
+      q || undefined
+    );
+
     if (res.success && res.data) {
       setProductos(res.data.productos);
       setCategorias(res.data.categorias);
@@ -117,12 +122,17 @@ export default function CajaPage() {
     loadProductos(activeSucursal, categoriaSeleccionada, val);
   };
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && productos.length === 1) {
+  const handleSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && buscarProducto.trim()) {
       e.preventDefault();
-      addToCart(productos[0]);
-      setBuscarProducto("");
-      loadProductos(activeSucursal, categoriaSeleccionada, "");
+      const code = buscarProducto.trim();
+      const exactMatch = productos.find(p => p.codigo?.toLowerCase() === code.toLowerCase());
+
+      if (exactMatch && exactMatch.stock > 0) {
+        addToCart(exactMatch);
+        setBuscarProducto("");
+        loadProductos(activeSucursal, categoriaSeleccionada, "");
+      }
     }
   };
 
@@ -131,6 +141,7 @@ export default function CajaPage() {
       setClientesPOS([]);
       return;
     }
+
     const timer = setTimeout(async () => {
       setLoadingClientesPOS(true);
       const res = await searchClientesPOS(buscarClientePOS);
@@ -139,38 +150,35 @@ export default function CajaPage() {
       }
       setLoadingClientesPOS(false);
     }, 300);
-    return () => clearTimeout(timer);
-  }, [buscarClientePOS, activeSucursal]);
 
-  const addToCart = (producto: any) => {
-    if (producto.stock <= 0) {
-      setErrorPOS(`El producto "${producto.nombre}" está agotado`);
-      setTimeout(() => setErrorPOS(null), 3000);
-      return;
-    }
+    return () => clearTimeout(timer);
+  }, [buscarClientePOS]);
+
+  const addToCart = (prod: any) => {
+    if (prod.stock <= 0) return;
 
     setCart(prev => {
-      const existing = prev.find(item => item.productoId === producto.id);
+      const existing = prev.find(item => item.productoId === prod.id);
       if (existing) {
-        if (existing.cantidad >= producto.stock) {
-          setErrorPOS(`Stock máximo alcanzado para "${producto.nombre}" (${producto.stock} disp.)`);
-          setTimeout(() => setErrorPOS(null), 3000);
-          return prev;
-        }
+        if (existing.cantidad >= prod.stock) return prev;
         return prev.map(item =>
-          item.productoId === producto.id
-            ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioUnitario }
+          item.productoId === prod.id
+            ? {
+                ...item,
+                cantidad: item.cantidad + 1,
+                subtotal: (item.cantidad + 1) * item.precioUnitario,
+              }
             : item
         );
       } else {
         return [
           ...prev,
           {
-            productoId: producto.id,
-            nombre: producto.nombre,
+            productoId: prod.id,
+            nombre: prod.nombre,
+            precioUnitario: Number(prod.precio),
             cantidad: 1,
-            precioUnitario: producto.precio,
-            subtotal: producto.precio,
+            subtotal: Number(prod.precio),
           },
         ];
       }
@@ -183,17 +191,13 @@ export default function CajaPage() {
       prev
         .map(item => {
           if (item.productoId === productoId) {
-            const nuevaCantidad = item.cantidad + delta;
-            if (nuevaCantidad <= 0) return null;
-            if (prod && nuevaCantidad > prod.stock) {
-              setErrorPOS(`Stock máximo alcanzado para "${item.nombre}" (${prod.stock} disp.)`);
-              setTimeout(() => setErrorPOS(null), 3000);
-              return item;
-            }
+            const nuevaCant = item.cantidad + delta;
+            if (nuevaCant <= 0) return null;
+            if (prod && nuevaCant > prod.stock) return item;
             return {
               ...item,
-              cantidad: nuevaCantidad,
-              subtotal: nuevaCantidad * item.precioUnitario,
+              cantidad: nuevaCant,
+              subtotal: nuevaCant * item.precioUnitario,
             };
           }
           return item;
@@ -300,11 +304,11 @@ export default function CajaPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Store className="h-5 w-5 text-indigo-600" />
+            <Store className="h-5 w-5 text-cyan-600" />
             Punto de Venta / Caja
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Sede: <strong className="text-slate-800">{sucursalNombre}</strong>
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
+            Sede: <strong className="text-slate-900">{sucursalNombre}</strong>
           </p>
         </div>
 
@@ -314,31 +318,31 @@ export default function CajaPage() {
               onClick={() => setActiveTab("pos")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
                 activeTab === "pos"
-                  ? "bg-white text-slate-900 shadow-xs font-semibold"
+                  ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <ShoppingCart className="h-3.5 w-3.5" />
+              <ShoppingCart className="h-3.5 w-3.5 text-cyan-600" />
               <span>Cantina / POS</span>
             </button>
             <button
               onClick={() => setActiveTab("membresias")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
                 activeTab === "membresias"
-                  ? "bg-white text-slate-900 shadow-xs font-semibold"
+                  ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <CreditCard className="h-3.5 w-3.5" />
+              <CreditCard className="h-3.5 w-3.5 text-cyan-600" />
               <span>Cobro de Membresías</span>
             </button>
           </div>
 
           <Link
             href="/dashboard/caja/movimientos"
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 hover:bg-slate-50 shadow-2xs transition"
           >
-            <History className="h-3.5 w-3.5 text-slate-500" />
+            <History className="h-3.5 w-3.5 text-slate-600" />
             <span>Arqueo</span>
           </Link>
         </div>
@@ -362,12 +366,12 @@ export default function CajaPage() {
                   onChange={e => handleBuscarProductoChange(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
                   placeholder="Buscar producto o escanear código de barras..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-mono self-center sm:self-auto border border-slate-200">
-                <Barcode className="h-3.5 w-3.5 text-indigo-600" />
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 text-cyan-900 rounded-lg text-xs font-mono font-semibold self-center sm:self-auto border border-cyan-200">
+                <Barcode className="h-3.5 w-3.5 text-cyan-600" />
                 <span className="text-[11px]">Lector activo</span>
               </div>
             </div>
@@ -376,10 +380,10 @@ export default function CajaPage() {
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
               <button
                 onClick={() => handleCategoriaChange("todas")}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition ${
                   categoriaSeleccionada === "todas"
-                    ? "bg-slate-900 text-white font-semibold"
-                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
                 }`}
               >
                 Todas las categorías
@@ -388,10 +392,10 @@ export default function CajaPage() {
                 <button
                   key={cat}
                   onClick={() => handleCategoriaChange(cat)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition ${
                     categoriaSeleccionada === cat
-                      ? "bg-slate-900 text-white font-semibold"
-                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
                   }`}
                 >
                   {cat}
@@ -401,14 +405,14 @@ export default function CajaPage() {
 
             {/* Grid de Productos */}
             {loadingProductos ? (
-              <div className="p-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200/90 text-xs font-medium">
+              <div className="p-12 text-center text-slate-500 bg-white rounded-xl border border-slate-200/90 text-xs font-medium">
                 Cargando catálogo...
               </div>
             ) : productos.length === 0 ? (
               <div className="p-12 text-center text-slate-500 bg-white rounded-xl border border-slate-200/90">
-                <PackageCheck className="h-8 w-8 mx-auto text-slate-300 mb-1" />
-                <p className="font-semibold text-slate-800 text-xs">No se encontraron productos</p>
-                <p className="text-[11px] text-slate-400">Intenta con otro término o categoría.</p>
+                <PackageCheck className="h-8 w-8 mx-auto text-slate-400 mb-1" />
+                <p className="font-bold text-slate-900 text-xs">No se encontraron productos</p>
+                <p className="text-[11px] text-slate-500">Intenta con otro término o categoría.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
@@ -426,22 +430,22 @@ export default function CajaPage() {
                         sinStock
                           ? "bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed"
                           : enCarrito
-                          ? "bg-indigo-50/70 border-indigo-500 ring-1 ring-indigo-500"
+                          ? "bg-cyan-50/90 border-cyan-500 ring-2 ring-cyan-500/30"
                           : "bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs active:scale-98"
                       }`}
                     >
                       {enCarrito && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
+                        <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
                           {enCarrito.cantidad}
                         </span>
                       )}
 
                       <div>
-                        <div className="flex items-center justify-between text-[9px] text-slate-400 uppercase font-semibold mb-0.5">
+                        <div className="flex items-center justify-between text-[9px] text-slate-500 uppercase font-bold mb-0.5">
                           <span className="truncate max-w-[80px]">{p.categoria || "Cantina"}</span>
                           {p.codigo && <span className="font-mono">{p.codigo}</span>}
                         </div>
-                        <h4 className="text-xs font-semibold text-slate-900 line-clamp-2 leading-tight">
+                        <h4 className="text-xs font-bold text-slate-900 line-clamp-2 leading-tight">
                           {p.nombre}
                         </h4>
                       </div>
@@ -452,12 +456,12 @@ export default function CajaPage() {
                         </span>
 
                         <span
-                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
                             sinStock
-                              ? "bg-rose-50 text-rose-700"
+                              ? "bg-rose-50 text-rose-800 border-rose-200"
                               : stockBajo
-                              ? "bg-amber-50 text-amber-800"
-                              : "bg-emerald-50 text-emerald-700"
+                              ? "bg-amber-50 text-amber-900 border-amber-200"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-200"
                           }`}
                         >
                           {sinStock ? "Agotado" : `${p.stock} disp.`}
@@ -476,15 +480,15 @@ export default function CajaPage() {
             {/* Carrito Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-indigo-600" />
+                <ShoppingCart className="h-4 w-4 text-cyan-600" />
                 <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Carrito de Venta</h3>
-                <span className="text-[11px] text-slate-500 font-mono">({totalArticulos})</span>
+                <span className="text-[11px] text-slate-600 font-mono font-semibold">({totalArticulos})</span>
               </div>
 
               {cart.length > 0 && (
                 <button
                   onClick={clearCart}
-                  className="text-[11px] font-medium text-rose-600 hover:text-rose-700"
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-800"
                 >
                   Vaciar
                 </button>
@@ -492,8 +496,8 @@ export default function CajaPage() {
             </div>
 
             {errorPOS && (
-              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg flex items-start gap-1.5">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-600" />
+              <div className="p-2.5 bg-rose-50 border border-rose-300 text-rose-900 text-xs rounded-lg flex items-start gap-1.5 font-semibold">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-700" />
                 <span>{errorPOS}</span>
               </div>
             )}
@@ -501,35 +505,35 @@ export default function CajaPage() {
             {/* Items Carrito */}
             <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 text-xs">
               {cart.length === 0 ? (
-                <div className="py-8 text-center text-slate-400">
-                  <ShoppingCart className="h-6 w-6 mx-auto text-slate-300 mb-1" />
-                  <p className="font-medium text-slate-600">Carrito vacío</p>
-                  <p className="text-[11px] text-slate-400">Haz clic en los productos para agregarlos.</p>
+                <div className="py-8 text-center text-slate-500">
+                  <ShoppingCart className="h-6 w-6 mx-auto text-slate-400 mb-1" />
+                  <p className="font-bold text-slate-800">Carrito vacío</p>
+                  <p className="text-[11px] text-slate-500">Haz clic en los productos para agregarlos.</p>
                 </div>
               ) : (
                 cart.map(item => (
                   <div
                     key={item.productoId}
-                    className="flex items-center justify-between p-2 bg-slate-50/70 rounded-lg border border-slate-200/80"
+                    className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-200"
                   >
                     <div className="flex-1 min-w-0 pr-2">
-                      <p className="font-semibold text-slate-900 truncate">{item.nombre}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">{formatMoney(item.precioUnitario)} c/u</p>
+                      <p className="font-bold text-slate-900 truncate">{item.nombre}</p>
+                      <p className="text-[10px] text-slate-600 font-mono font-medium">{formatMoney(item.precioUnitario)} c/u</p>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-white px-1 py-0.5 rounded border border-slate-200">
+                    <div className="flex items-center gap-1 bg-white px-1 py-0.5 rounded border border-slate-300">
                       <button
                         onClick={() => updateQuantity(item.productoId, -1)}
-                        className="p-0.5 text-slate-500 hover:text-indigo-600 rounded"
+                        className="p-0.5 text-slate-600 hover:text-cyan-700 rounded"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
-                      <span className="w-4 text-center font-bold text-xs text-slate-800 font-mono">
+                      <span className="w-4 text-center font-bold text-xs text-slate-900 font-mono">
                         {item.cantidad}
                       </span>
                       <button
                         onClick={() => updateQuantity(item.productoId, 1)}
-                        className="p-0.5 text-slate-500 hover:text-indigo-600 rounded"
+                        className="p-0.5 text-slate-600 hover:text-cyan-700 rounded"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -556,20 +560,20 @@ export default function CajaPage() {
               </label>
 
               {clienteSeleccionadoPOS ? (
-                <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded-lg space-y-0.5 relative text-xs">
+                <div className="p-2.5 bg-cyan-50/70 border border-cyan-200 rounded-lg space-y-0.5 relative text-xs">
                   <button
                     onClick={() => setClienteSeleccionadoPOS(null)}
-                    className="absolute top-2 right-2 text-indigo-400 hover:text-indigo-700"
+                    className="absolute top-2 right-2 text-cyan-700 hover:text-cyan-900"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                   <p className="font-bold text-slate-900">
                     {clienteSeleccionadoPOS.nombre} {clienteSeleccionadoPOS.apellido}
                   </p>
-                  <p className="text-[10px] text-slate-500 font-mono">DNI: {clienteSeleccionadoPOS.documento}</p>
-                  <div className="pt-1 border-t border-indigo-200/50 flex items-center justify-between text-[10px] font-mono">
+                  <p className="text-[10px] text-cyan-900 font-mono font-semibold">DNI: {clienteSeleccionadoPOS.documento}</p>
+                  <div className="pt-1 border-t border-cyan-200/60 flex items-center justify-between text-[10px] font-mono">
                     <span>Deuda: <strong className={clienteSeleccionadoPOS.saldoCuenta > 0 ? "text-rose-600" : "text-emerald-700"}>{formatMoney(clienteSeleccionadoPOS.saldoCuenta)}</strong></span>
-                    <span>Disp: <strong className="text-slate-800">{formatMoney(clienteSeleccionadoPOS.disponibleCredito)}</strong></span>
+                    <span>Disp: <strong className="text-slate-900">{formatMoney(clienteSeleccionadoPOS.disponibleCredito)}</strong></span>
                   </div>
                 </div>
               ) : (
@@ -580,7 +584,7 @@ export default function CajaPage() {
                     value={buscarClientePOS}
                     onChange={e => setBuscarClientePOS(e.target.value)}
                     placeholder="Buscar socio por DNI o nombre..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
 
                   {clientesPOS.length > 0 && !clienteSeleccionadoPOS && (
@@ -596,8 +600,8 @@ export default function CajaPage() {
                           className="w-full text-left p-2 hover:bg-slate-50 flex justify-between items-center"
                         >
                           <div>
-                            <p className="font-semibold text-slate-900">{c.nombre} {c.apellido}</p>
-                            <p className="text-[10px] text-slate-500 font-mono">DNI: {c.documento}</p>
+                            <p className="font-bold text-slate-900">{c.nombre} {c.apellido}</p>
+                            <p className="text-[10px] text-slate-600 font-mono">DNI: {c.documento}</p>
                           </div>
                           <span className={`text-[10px] font-mono font-bold ${c.saldoCuenta > 0 ? "text-rose-600" : "text-emerald-700"}`}>
                             {formatMoney(c.saldoCuenta)}
@@ -627,10 +631,10 @@ export default function CajaPage() {
                       key={m.id}
                       type="button"
                       onClick={() => setTipoPagoPOS(m.id as any)}
-                      className={`p-2 rounded-lg border font-medium flex items-center justify-center gap-1.5 transition ${
+                      className={`p-2 rounded-lg border font-semibold flex items-center justify-center gap-1.5 transition ${
                         isSel
-                          ? "bg-slate-900 text-white border-slate-900 font-semibold"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
                       }`}
                     >
                       <Icon className="h-3.5 w-3.5" />
@@ -651,7 +655,7 @@ export default function CajaPage() {
               <button
                 disabled={cart.length === 0 || procesandoVenta}
                 onClick={handleProcesarVentaPOS}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5"
               >
                 {procesandoVenta ? (
                   "Procesando venta..."
@@ -671,15 +675,15 @@ export default function CajaPage() {
       {activeTab === "membresias" && (
         <div className="max-w-3xl mx-auto space-y-4">
           {successMsgMem && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg flex items-center gap-2 text-xs font-medium">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-lg flex items-center gap-2 text-xs font-semibold">
+              <CheckCircle2 className="h-4 w-4 text-emerald-700 flex-shrink-0" />
               <span>{successMsgMem}</span>
             </div>
           )}
 
           {errorMsgMem && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg flex items-center gap-2 text-xs font-medium">
-              <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+            <div className="p-3 bg-rose-50 border border-rose-300 text-rose-900 rounded-lg flex items-center gap-2 text-xs font-semibold">
+              <AlertCircle className="h-4 w-4 text-rose-700 flex-shrink-0" />
               <span>{errorMsgMem}</span>
             </div>
           )}
@@ -687,10 +691,10 @@ export default function CajaPage() {
           <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-indigo-600" />
+                <CreditCard className="h-4 w-4 text-cyan-600" />
                 Cobro de Cuota de Membresía
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-600 mt-0.5 font-medium">
                 Busca al socio y selecciona el plan para renovar su acceso.
               </p>
             </div>
@@ -711,13 +715,13 @@ export default function CajaPage() {
                       if (selectedClienteMem) setSelectedClienteMem(null);
                     }}
                     placeholder="DNI, Nombre o Apellido..."
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={loadingSearchMem}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition"
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
                 >
                   {loadingSearchMem ? "Buscando..." : "Buscar"}
                 </button>
@@ -741,12 +745,12 @@ export default function CajaPage() {
                         className="w-full text-left p-2.5 hover:bg-slate-50 flex items-center justify-between"
                       >
                         <div>
-                          <p className="font-semibold text-slate-900">{c.nombre} {c.apellido}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">DNI: {c.documento}</p>
+                          <p className="font-bold text-slate-900">{c.nombre} {c.apellido}</p>
+                          <p className="text-[10px] text-slate-600 font-mono font-semibold">DNI: {c.documento}</p>
                         </div>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            alDia ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            alDia ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-rose-50 text-rose-800 border-rose-300"
                           }`}
                         >
                           {alDia ? "● Al Día" : "● Vencido"}
@@ -758,14 +762,14 @@ export default function CajaPage() {
               )}
 
               {selectedClienteMem && (
-                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg flex items-center justify-between text-xs">
+                <div className="p-3 bg-cyan-50/70 border border-cyan-200 rounded-lg flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-md bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">
+                    <div className="w-8 h-8 rounded-md bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold flex items-center justify-center text-xs">
                       {selectedClienteMem.nombre.charAt(0)}{selectedClienteMem.apellido.charAt(0)}
                     </div>
                     <div>
                       <p className="font-bold text-slate-900">{selectedClienteMem.nombre} {selectedClienteMem.apellido}</p>
-                      <p className="text-[10px] text-slate-500 font-mono">DNI: {selectedClienteMem.documento}</p>
+                      <p className="text-[10px] text-cyan-900 font-mono font-semibold">DNI: {selectedClienteMem.documento}</p>
                     </div>
                   </div>
                   <button
@@ -774,7 +778,7 @@ export default function CajaPage() {
                       setSelectedClienteMem(null);
                       setQueryMem("");
                     }}
-                    className="text-xs text-indigo-700 font-medium hover:underline"
+                    className="text-xs text-cyan-700 font-bold hover:underline"
                   >
                     Cambiar
                   </button>
@@ -795,11 +799,11 @@ export default function CajaPage() {
                     onClick={() => setSelectedMembresiaId(m.id)}
                     className={`p-3 rounded-lg border text-left transition-all ${
                       selectedMembresiaId === m.id
-                        ? "bg-slate-900 text-white border-slate-900 font-semibold"
-                        : "bg-white border-slate-200 hover:border-slate-300 text-slate-800"
+                        ? "bg-slate-900 text-white border-slate-900 font-semibold shadow-xs"
+                        : "bg-white border-slate-300 hover:border-slate-400 text-slate-800"
                     }`}
                   >
-                    <p className="font-semibold">{m.nombre}</p>
+                    <p className="font-bold">{m.nombre}</p>
                     <p className={`text-[10px] ${selectedMembresiaId === m.id ? "text-slate-300" : "text-slate-500"}`}>
                       {m.diasDuracion} días
                     </p>
@@ -816,7 +820,7 @@ export default function CajaPage() {
                 type="button"
                 disabled={!selectedClienteMem || selectedMembresiaId === "" || loadingPagoMem}
                 onClick={handleCobrarMem}
-                className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-xs shadow-2xs hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 {loadingPagoMem ? "Registrando Pago..." : "Confirmar Cobro de Membresía"}
               </button>
@@ -827,7 +831,7 @@ export default function CajaPage() {
 
       {/* Modal Ticket de Venta */}
       {ticketVenta && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-2xs flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="bg-slate-900 p-4 text-white text-center relative">
               <button
@@ -836,15 +840,15 @@ export default function CajaPage() {
               >
                 <X className="h-4 w-4" />
               </button>
-              <CheckCircle2 className="h-6 w-6 text-emerald-400 mx-auto mb-1" />
+              <CheckCircle2 className="h-6 w-6 text-cyan-400 mx-auto mb-1" />
               <h3 className="text-sm font-bold">Venta Registrada</h3>
-              <p className="text-[11px] text-slate-400 font-mono">Ticket #{ticketVenta.id}</p>
+              <p className="text-[11px] text-slate-300 font-mono">Ticket #{ticketVenta.id}</p>
             </div>
 
             <div className="p-4 space-y-3 font-mono text-xs text-slate-800">
               <div className="text-center pb-2 border-b border-dashed border-slate-200">
                 <p className="font-bold text-slate-900">{ticketVenta.sucursal}</p>
-                <p className="text-[10px] text-slate-400">{new Date(ticketVenta.fechaVenta).toLocaleString("es-AR")}</p>
+                <p className="text-[10px] text-slate-500">{new Date(ticketVenta.fechaVenta).toLocaleString("es-AR")}</p>
               </div>
 
               <div className="space-y-0.5 text-[11px]">
@@ -872,9 +876,9 @@ export default function CajaPage() {
             <div className="p-3 bg-slate-50 border-t border-slate-100 flex gap-2">
               <button
                 onClick={() => window.print()}
-                className="flex-1 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium text-xs hover:bg-slate-50 flex items-center justify-center gap-1 shadow-2xs"
+                className="flex-1 py-2 bg-white border border-slate-300 text-slate-800 rounded-lg font-medium text-xs hover:bg-slate-50 flex items-center justify-center gap-1 shadow-2xs"
               >
-                <Printer className="h-3.5 w-3.5" />
+                <Printer className="h-3.5 w-3.5 text-cyan-600" />
                 <span>Imprimir</span>
               </button>
               <button

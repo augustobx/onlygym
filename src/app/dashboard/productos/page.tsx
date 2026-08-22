@@ -63,10 +63,10 @@ export default function ProductosPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Package className="h-5 w-5 text-indigo-600" />
+            <Package className="h-5 w-5 text-cyan-600" />
             Inventario & Stock de Cantina
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
             Control de productos, reposición y precios de venta en mostrador.
           </p>
         </div>
@@ -74,15 +74,15 @@ export default function ProductosPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard/caja"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-medium shadow-2xs transition"
           >
-            <ShoppingBag className="h-3.5 w-3.5 text-slate-500" />
+            <ShoppingBag className="h-3.5 w-3.5 text-cyan-600" />
             <span>Punto de Venta</span>
           </Link>
 
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-1.5 bg-indigo-600 text-white px-3.5 py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold shadow-xs transition"
           >
             <Plus className="h-4 w-4" />
             <span>Nuevo Producto</span>
@@ -91,12 +91,12 @@ export default function ProductosPage() {
       </div>
 
       {msg && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 border ${
+        <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border ${
           msg.type === "success" 
-            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
-            : "bg-rose-50 text-rose-800 border-rose-200"
+            ? "bg-emerald-50 text-emerald-900 border-emerald-300" 
+            : "bg-rose-50 text-rose-900 border-rose-300"
         }`}>
-          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-rose-600" />}
+          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertCircle className="h-4 w-4 text-rose-700" />}
           <span>{msg.text}</span>
         </div>
       )}
@@ -110,14 +110,14 @@ export default function ProductosPage() {
             value={buscar}
             onChange={e => setBuscar(e.target.value)}
             placeholder="Buscar por nombre, código o categoría..."
-            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-900 rounded-lg text-xs font-medium focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
           />
         </div>
 
         <select
           value={filtro}
           onChange={e => setFiltro(e.target.value)}
-          className="bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+          className="bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
         >
           <option value="activo">Solo Activos</option>
           <option value="inactivo">Inactivos</option>
@@ -129,7 +129,7 @@ export default function ProductosPage() {
       <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-xs">
-            <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-2.5 text-left">Código</th>
                 <th className="px-4 py-2.5 text-left">Producto</th>
@@ -143,7 +143,7 @@ export default function ProductosPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {productos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500 font-medium">
                     No se encontraron productos en el inventario.
                   </td>
                 </tr>
@@ -154,26 +154,26 @@ export default function ProductosPage() {
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500">{p.codigo || "—"}</td>
-                      <td className="px-4 py-2.5 font-semibold text-slate-900">{p.nombre}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{p.categoria || "Cantina"}</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-600 font-semibold">{p.codigo || "—"}</td>
+                      <td className="px-4 py-2.5 font-bold text-slate-900">{p.nombre}</td>
+                      <td className="px-4 py-2.5 text-slate-600 font-medium">{p.categoria || "Cantina"}</td>
                       <td className="px-4 py-2.5 text-right font-bold font-mono text-slate-900 tabular-nums">{formatMoney(Number(p.precio))}</td>
                       <td className="px-4 py-2.5 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             sinStock
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              ? "bg-rose-50 text-rose-800 border-rose-300"
                               : bajoStock
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              ? "bg-amber-50 text-amber-900 border-amber-300"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-300"
                           }`}
                         >
                           {p.stock} un.
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          p.estado === "activo" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          p.estado === "activo" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-slate-100 text-slate-700 border-slate-300"
                         }`}>
                           {p.estado === "activo" ? "● Activo" : "● Inactivo"}
                         </span>
@@ -181,13 +181,13 @@ export default function ProductosPage() {
                       <td className="px-4 py-2.5 text-right space-x-1">
                         <button
                           onClick={() => openEdit(p)}
-                          className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-cyan-50 hover:text-cyan-800 text-slate-800 rounded-md text-xs font-semibold border border-slate-300 transition"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleToggle(p)}
-                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-500 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-600 rounded-md text-xs font-medium border border-slate-300 transition"
                         >
                           {p.estado === "activo" ? "Desactivar" : "Activar"}
                         </button>
@@ -203,13 +203,13 @@ export default function ProductosPage() {
 
       {/* Modal Crear/Editar */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {editando ? "Editar Producto" : "Nuevo Producto"}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -217,67 +217,67 @@ export default function ProductosPage() {
             <form onSubmit={handleSubmit} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Código / Barras</label>
+                  <label className="block font-bold text-slate-700 mb-1">Código / Barras</label>
                   <input
                     value={form.codigo}
                     onChange={e => setForm({ ...form, codigo: e.target.value })}
                     placeholder="Ej: 779123456"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-mono focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Categoría</label>
+                  <label className="block font-bold text-slate-700 mb-1">Categoría</label>
                   <input
                     value={form.categoria}
                     onChange={e => setForm({ ...form, categoria: e.target.value })}
                     placeholder="Ej: Bebidas, Suplementos"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Nombre del Producto *</label>
+                <label className="block font-bold text-slate-700 mb-1">Nombre del Producto *</label>
                 <input
                   required
                   value={form.nombre}
                   onChange={e => setForm({ ...form, nombre: e.target.value })}
                   placeholder="Ej: Bebida Isotónica 500ml"
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Precio ($) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Precio ($) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={form.precio}
                     onChange={e => setForm({ ...form, precio: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Stock Actual *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Stock Actual *</label>
                   <input
                     type="number"
                     required
                     value={form.stock}
                     onChange={e => setForm({ ...form, stock: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Stock Mínimo</label>
+                  <label className="block font-bold text-slate-700 mb-1">Stock Mínimo</label>
                   <input
                     type="number"
                     value={form.stockMinimo}
                     onChange={e => setForm({ ...form, stockMinimo: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-mono focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -286,13 +286,13 @@ export default function ProductosPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-semibold shadow-2xs transition"
+                  className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg py-2 text-xs font-semibold shadow-xs transition"
                 >
                   {editando ? "Guardar Cambios" : "Crear Producto"}
                 </button>

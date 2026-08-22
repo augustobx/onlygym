@@ -35,161 +35,138 @@ function formatDate(d: string | null) {
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [estadoFiltro, setEstadoFiltro] = useState<string>("todos");
-  
-  // Paginación
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(15);
-  const [total, setTotal] = useState(0);
+  const [buscar, setBuscar] = useState("");
+  const [filtroMembresia, setFiltroMembresia] = useState("todos"); // todos | al_dia | vencidos | por_vencer
+  const [pagina, setPagina] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  const [sucursalId, setSucursalId] = useState<number>(1);
-  const [exportando, setExportando] = useState(false);
-  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const sucursalId = typeof window !== "undefined" ? Number(localStorage.getItem("activeSucursalId") || "1") : 1;
 
   useEffect(() => {
-    const sId = localStorage.getItem("activeSucursalId");
-    if (sId) setSucursalId(parseInt(sId));
-  }, []);
+    fetchClientes();
+  }, [pagina, filtroMembresia]);
 
-  const loadData = async (p = page, q = search, est = estadoFiltro) => {
+  const fetchClientes = async () => {
     setLoading(true);
     const res = await getClientesPaginados({
-      page: p,
-      limit,
-      search: q,
-      estado: est,
       sucursalId,
+      page: pagina,
+      limit: 12,
+      search: buscar,
+      estado: filtroMembresia,
     });
-
     if (res.success && res.data) {
       setClientes(res.data.items);
-      setTotal(res.data.pagination.total);
-      setTotalPages(res.data.pagination.totalPages);
+      setTotalPages(res.data.pagination.totalPages || 1);
+      setTotalRecords(res.data.pagination.total || 0);
     }
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadData(1, search, estadoFiltro);
-    setPage(1);
-  }, [search, estadoFiltro, sucursalId]);
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setPage(newPage);
-    loadData(newPage, search, estadoFiltro);
+  const handleBuscar = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPagina(1);
+    fetchClientes();
   };
 
-  const handleToggleEstado = async (id: number, estadoActual: string) => {
-    const res = await toggleClienteEstado(id, estadoActual);
+  const handleToggleEstado = async (id: number, currentEstado: string) => {
+    const nuevoEstado = currentEstado === "activo" ? "inactivo" : "activo";
+    const res = await toggleClienteEstado(id, nuevoEstado);
     if (res.success) {
-      setMsg({ type: "success", text: `Estado del socio actualizado a ${res.nuevoEstado}` });
-      loadData(page, search, estadoFiltro);
-      setTimeout(() => setMsg(null), 3000);
+      setClientes(clientes.map(c => c.id === id ? { ...c, estado: nuevoEstado } : c));
     }
   };
 
-  const handleExportarCSV = async () => {
-    setExportando(true);
+  const handleExportar = async () => {
     const res = await exportarClientesData(sucursalId);
     if (res.success && res.data) {
-      const headers = ["DNI", "Nombre", "Apellido", "Telefono", "Email", "Estado", "Membresia", "Ultimo_Plan", "Vencimiento", "Saldo_Deuda", "Fecha_Registro"];
-      const csvRows = [
-        headers.join(","),
-        ...res.data.map((c: any) =>
-          [`"${c.documento}"`, `"${c.nombre}"`, `"${c.apellido}"`, `"${c.telefono}"`, `"${c.email}"`, `"${c.estado}"`, `"${c.estadoMembresia}"`, `"${c.ultimoPlan}"`, `"${c.vencimiento}"`, c.saldoDeuda, `"${c.fechaRegistro}"`].join(",")
-        ),
-      ];
-      const csvContent = "\uFEFF" + csvRows.join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
+      const csvContent = "data:text/csv;charset=utf-8," + 
+        ["Documento,Nombre,Apellido,Telefono,Email,Saldo,Estado,Vencimiento"]
+        .concat(res.data.map((c: any) => 
+          `"${c.documento}","${c.nombre}","${c.apellido}","${c.telefono || ''}","${c.email || ''}",${c.cuentaCorriente?.saldo || 0},"${c.estado}","${c.ultimoPago?.fechaVencimiento || 'Sin pago'}"`
+        )).join("\n");
+      
+      const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `socios_gymlink_${new Date().toISOString().split("T")[0]}.csv`);
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `socios_gymlink_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
-    setExportando(false);
   };
 
-  const sucursalNombre = typeof window !== "undefined" ? localStorage.getItem("activeSucursalName") || "GymLink" : "GymLink";
+  const generarLinkWhatsApp = (cliente: any) => {
+    if (!cliente.telefono) return null;
+    const cleanPhone = cliente.telefono.replace(/\D/g, "");
+    const nombre = `${cliente.nombre} ${cliente.apellido}`;
+    const vencimiento = cliente.ultimoPago?.fechaVencimiento ? formatDate(cliente.ultimoPago.fechaVencimiento) : "recientemente";
+    const mensaje = encodeURIComponent(`Hola ${nombre}! Te recordamos de GymLink que tu cuota de gimnasio venció el ${vencimiento}. Te esperamos para renovar tu membresía y seguir entrenando! 💪`);
+    return `https://wa.me/${cleanPhone}?text=${mensaje}`;
+  };
 
   return (
     <div className="space-y-5 font-sans">
       
-      {/* Header */}
+      {/* Header & Quick Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Users className="h-5 w-5 text-indigo-600" />
-            Gestión de Socios
-          </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {total} socios registrados. Ficha 360, renovaciones rápidas y avisos por WhatsApp.
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Padrón de Socios</h2>
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
+            Gestión 360°, control de cuotas, membresías y contacto directo por WhatsApp
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={handleExportarCSV}
-            disabled={exportando || total === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs transition disabled:opacity-50"
+            onClick={handleExportar}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-medium shadow-2xs transition"
           >
-            <Download className="h-3.5 w-3.5 text-slate-500" />
-            <span>{exportando ? "Exportando..." : "Exportar CSV"}</span>
+            <Download className="h-3.5 w-3.5 text-cyan-600" />
+            <span>Exportar CSV</span>
           </button>
 
           <Link
             href="/dashboard/clientes/nuevo"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
           >
-            <Plus className="h-4 w-4" />
-            <span>Nuevo Socio</span>
+            <Plus className="h-3.5 w-3.5" />
+            <span>Nuevo Socio (3-en-1)</span>
           </Link>
         </div>
       </div>
 
-      {/* Alertas */}
-      {msg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" />
-          <span>{msg.text}</span>
-        </div>
-      )}
-
-      {/* Barra de Filtros & Búsqueda Compacta */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row gap-3 justify-between items-center">
-        {/* Buscador */}
-        <div className="relative w-full md:w-80">
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+        
+        {/* Search Input */}
+        <form onSubmit={handleBuscar} className="relative w-full md:w-80">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por DNI, nombre, teléfono..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-900 rounded-lg text-xs font-medium focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            placeholder="Buscar por DNI, Nombre o Apellido..."
+            value={buscar}
+            onChange={(e) => setBuscar(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition"
           />
-        </div>
+        </form>
 
-        {/* Segmented Control de Filtros */}
-        <div className="flex items-center gap-1 overflow-x-auto w-full md:w-auto p-0.5 bg-slate-100 rounded-lg">
+        {/* Segment Filters */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
           {[
             { id: "todos", label: "Todos" },
-            { id: "vencen_pronto", label: "⚠️ Vencen Pronto / Vencidos" },
             { id: "al_dia", label: "Al Día" },
-            { id: "vencido", label: "Vencidos" },
-            { id: "inactivo", label: "Inactivos" },
-          ].map(f => (
+            { id: "vencidos", label: "Vencidos" },
+            { id: "por_vencer", label: "Por Vencer (7d)" },
+          ].map((f) => (
             <button
               key={f.id}
-              onClick={() => setEstadoFiltro(f.id)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition ${
-                estadoFiltro === f.id
-                  ? "bg-white text-slate-900 shadow-xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900"
+              onClick={() => { setFiltroMembresia(f.id); setPagina(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                filtroMembresia === f.id
+                  ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-xs"
+                  : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
               }`}
             >
               {f.label}
@@ -198,137 +175,159 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      {/* Tabla Profesional de Socios */}
+      {/* Main Members Table */}
       <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-slate-400 text-xs font-medium">Cargando socios...</div>
-        ) : clientes.length === 0 ? (
-          <div className="py-16 text-center text-slate-500 space-y-1">
-            <Users className="h-8 w-8 mx-auto text-slate-300" />
-            <p className="font-semibold text-slate-800 text-sm">No se encontraron socios</p>
-            <p className="text-xs text-slate-400">Prueba cambiando los criterios de búsqueda.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-xs">
-              <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3">Socio</th>
+                <th className="px-4 py-3">Documento</th>
+                <th className="px-4 py-3">Teléfono / WhatsApp</th>
+                <th className="px-4 py-3">Estado Cuota</th>
+                <th className="px-4 py-3">Vencimiento</th>
+                <th className="px-4 py-3 text-right">Saldo Cantina</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {loading ? (
                 <tr>
-                  <th scope="col" className="px-4 py-2.5 text-left">Socio</th>
-                  <th scope="col" className="px-4 py-2.5 text-left">Contacto & WhatsApp</th>
-                  <th scope="col" className="px-4 py-2.5 text-center">Estado Membresía</th>
-                  <th scope="col" className="px-4 py-2.5 text-right">Cuenta Corriente</th>
-                  <th scope="col" className="px-4 py-2.5 text-right">Acciones</th>
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 font-medium">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600"></div>
+                      <span>Cargando socios...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {clientes.map(c => {
-                  const alDia = c.estadoMembresia === "AL_DIA";
-                  const cleanPhone = (c.telefono || "").replace(/[^0-9]/g, "");
-                  const whatsappLink = cleanPhone
-                    ? `https://wa.me/${cleanPhone}?text=Hola%20${encodeURIComponent(
-                        c.nombre
-                      )}!%20Te%20recordamos%20desde%20${encodeURIComponent(
-                        sucursalNombre
-                      )}%20que%20tu%20membres%C3%ADa%20(${encodeURIComponent(
-                        c.ultimoPlan
-                      )})%20vence%20el%20${formatDate(c.fechaVencimiento)}.%20%C2%A1Te%20esperamos%20para%20renovar!`
-                    : null;
+              ) : clientes.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 font-medium">
+                    No se encontraron socios con los filtros aplicados.
+                  </td>
+                </tr>
+              ) : (
+                clientes.map((c) => {
+                  const wsLink = generarLinkWhatsApp(c);
+                  const isAlDia = c.estadoCuota === "al_dia";
+                  const isVencido = c.estadoCuota === "vencido";
+                  const isPorVencer = c.estadoCuota === "por_vencer";
+                  const saldoDeuda = Number(c.cuentaCorriente?.saldo || 0);
 
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/80 transition">
-                      {/* Avatar y Nombre */}
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2.5">
+                    <tr key={c.id} className="hover:bg-slate-50/80 transition group">
+                      
+                      {/* Socio Name & Photo */}
+                      <td className="px-4 py-3">
+                        <Link href={`/dashboard/clientes/${c.id}`} className="flex items-center gap-2.5 group-hover:text-cyan-700">
                           {c.foto ? (
                             <img
                               src={c.foto}
                               alt={c.nombre}
-                              className="w-8 h-8 rounded-md object-cover border border-slate-200 flex-shrink-0"
+                              className="h-8 w-8 rounded-full object-cover border border-slate-200 flex-shrink-0"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-md bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center flex-shrink-0 border border-slate-200">
+                            <div className="h-8 w-8 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-800 font-bold flex items-center justify-center text-xs flex-shrink-0">
                               {c.nombre.charAt(0)}{c.apellido.charAt(0)}
                             </div>
                           )}
-
-                          <div className="truncate">
-                            <Link
-                              href={`/dashboard/clientes/${c.id}`}
-                              className="font-semibold text-slate-900 hover:text-indigo-600 transition truncate block"
-                            >
+                          <div>
+                            <span className="font-bold text-slate-900 block group-hover:text-cyan-700 transition">
                               {c.nombre} {c.apellido}
-                            </Link>
-                            <span className="text-[11px] text-slate-500 font-mono">DNI: {c.documento}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">{c.email || "Sin email"}</span>
                           </div>
-                        </div>
+                        </Link>
                       </td>
 
-                      {/* Contacto & WhatsApp */}
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-slate-700 text-[11px]">{c.telefono || "—"}</span>
-                          {whatsappLink && (
-                            <a
-                              href={whatsappLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold border border-emerald-200 transition"
-                              title="Enviar recordatorio por WhatsApp"
-                            >
-                              <MessageCircle className="w-3 h-3 text-emerald-600" />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
-                        </div>
-                        {c.email && (
-                          <span className="text-[10px] text-slate-400 truncate block max-w-[160px]">{c.email}</span>
+                      {/* DNI */}
+                      <td className="px-4 py-3 font-mono text-slate-700 font-semibold">
+                        {c.documento}
+                      </td>
+
+                      {/* Phone & WhatsApp */}
+                      <td className="px-4 py-3">
+                        {c.telefono ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-700 font-mono text-[11px]">{c.telefono}</span>
+                            {wsLink && (
+                              <a
+                                href={wsLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition"
+                                title="Enviar mensaje de WhatsApp"
+                              >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Sin teléfono</span>
                         )}
                       </td>
 
-                      {/* Estado Membresía */}
-                      <td className="px-4 py-2.5 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                            alDia
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-rose-50 text-rose-700 border-rose-200"
-                          }`}
-                        >
-                          {alDia ? `● Al Día (${c.diasRestantes}d)` : "● Vencido"}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block mt-0.5 truncate max-w-[120px] mx-auto">{c.ultimoPlan}</span>
+                      {/* Membership State */}
+                      <td className="px-4 py-3">
+                        {isAlDia && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Al Día
+                          </span>
+                        )}
+                        {isPorVencer && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                            <AlertCircle className="h-3 w-3" />
+                            Por Vencer
+                          </span>
+                        )}
+                        {isVencido && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-300">
+                            <AlertCircle className="h-3 w-3" />
+                            Vencido
+                          </span>
+                        )}
+                        {!c.ultimoPago && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                            Sin Cuota
+                          </span>
+                        )}
                       </td>
 
-                      {/* Cuenta Corriente */}
-                      <td className="px-4 py-2.5 text-right">
-                        <span
-                          className={`font-mono font-bold text-xs tabular-nums ${
-                            c.saldoCuenta > 0 ? "text-rose-600" : "text-slate-700"
-                          }`}
-                        >
-                          {formatMoney(c.saldoCuenta)}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block">
-                          {c.saldoCuenta > 0 ? "Deuda pendiente" : "Al día"}
-                        </span>
+                      {/* Expiration Date */}
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-700">
+                        {c.ultimoPago?.fechaVencimiento ? (
+                          <span>{formatDate(c.ultimoPago.fechaVencimiento)}</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
 
-                      {/* Acciones */}
-                      <td className="px-4 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-1">
+                      {/* Current Account Debt */}
+                      <td className="px-4 py-3 text-right font-mono font-bold tabular-nums">
+                        {saldoDeuda > 0 ? (
+                          <span className="text-rose-600">{formatMoney(saldoDeuda)}</span>
+                        ) : (
+                          <span className="text-emerald-700">$0.00</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Link
                             href={`/dashboard/clientes/${c.id}`}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200 rounded-md font-medium text-xs transition"
+                            className="px-2.5 py-1 rounded-md bg-white border border-slate-300 hover:bg-cyan-50 hover:border-cyan-300 text-slate-800 hover:text-cyan-800 text-[11px] font-semibold transition"
                           >
-                            Ficha 360 →
+                            Ficha 360°
                           </Link>
 
                           <button
                             onClick={() => handleToggleEstado(c.id, c.estado)}
-                            className={`p-1 rounded-md text-xs transition border ${
+                            className={`p-1 rounded-md border transition ${
                               c.estado === "activo"
-                                ? "bg-white text-slate-400 hover:text-rose-600 border-slate-200 hover:bg-rose-50"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                ? "bg-white border-slate-300 text-slate-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300"
+                                : "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
                             }`}
                             title={c.estado === "activo" ? "Desactivar socio" : "Activar socio"}
                           >
@@ -338,37 +337,38 @@ export default function ClientesPage() {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Paginación Compacta */}
-        {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <p className="text-xs text-slate-500 font-medium">
-              Página <strong>{page}</strong> de <strong>{totalPages}</strong> ({total} socios)
-            </p>
-
-            <div className="flex items-center gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => handlePageChange(page - 1)}
-                className="p-1.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => handlePageChange(page + 1)}
-                className="p-1.5 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+        {/* Pagination Bar */}
+        <div className="px-4 py-3 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs text-slate-600 font-medium">
+          <div>
+            Mostrando <strong>{clientes.length}</strong> de <strong>{totalRecords}</strong> socios
           </div>
-        )}
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setPagina(p => Math.max(1, p - 1))}
+              disabled={pagina === 1 || loading}
+              className="p-1 rounded-md bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-700 transition"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="font-mono text-slate-900 font-bold px-2">
+              {pagina} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPagina(p => Math.min(totalPages, p + 1))}
+              disabled={pagina === totalPages || loading}
+              className="p-1 rounded-md bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-700 transition"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

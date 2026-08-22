@@ -70,25 +70,25 @@ export default function PagosPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-indigo-600" />
+            <CreditCard className="h-5 w-5 text-cyan-600" />
             Cobro de Membresías & Cuotas
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
             Selecciona el socio y el plan para registrar el pago y emitir comprobante.
           </p>
         </div>
       </div>
 
       {success && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-lg text-xs font-medium flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 p-3 rounded-lg text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-700 flex-shrink-0" />
           <span>{success}</span>
         </div>
       )}
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-lg text-xs font-medium flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+        <div className="bg-rose-50 border border-rose-300 text-rose-900 p-3 rounded-lg text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-rose-700 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -110,7 +110,7 @@ export default function PagosPage() {
                 value={search}
                 onChange={e => { setSearch(e.target.value); setSelectedCliente(null); }}
                 placeholder="Escribe DNI, nombre o apellido..."
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none placeholder-slate-400"
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
               />
             </div>
 
@@ -121,17 +121,17 @@ export default function PagosPage() {
                   <button
                     key={c.id}
                     onClick={() => { setSelectedCliente(c); setClientes([]); setSearch(`${c.nombre} ${c.apellido}`); }}
-                    className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center justify-between transition"
+                    className="w-full text-left px-3 py-2 hover:bg-cyan-50/70 flex items-center justify-between transition"
                   >
                     <div>
-                      <span className="font-semibold text-slate-900">{c.nombre} {c.apellido}</span>
-                      <span className="text-slate-500 ml-2 font-mono text-[11px]">DNI: {c.documento}</span>
+                      <span className="font-bold text-slate-900">{c.nombre} {c.apellido}</span>
+                      <span className="text-slate-600 ml-2 font-mono text-[11px]">DNI: {c.documento}</span>
                     </div>
                     {c.pagos?.[0] && (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                         new Date(c.pagos[0].fechaVencimiento) >= new Date()
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-rose-50 text-rose-700 border-rose-200"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                          : "bg-rose-50 text-rose-800 border-rose-300"
                       }`}>
                         {new Date(c.pagos[0].fechaVencimiento) >= new Date() ? "● Al Día" : "● Vencido"}
                       </span>
@@ -143,19 +143,19 @@ export default function PagosPage() {
 
             {/* Socio Seleccionado Banner */}
             {selectedCliente && (
-              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg flex items-center justify-between text-xs text-indigo-950">
+              <div className="p-3 bg-cyan-50/70 border border-cyan-200 rounded-lg flex items-center justify-between text-xs text-cyan-950">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-indigo-600 text-white rounded-md">
+                  <div className="p-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-md">
                     <User className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <span className="font-bold text-xs block">{selectedCliente.nombre} {selectedCliente.apellido}</span>
-                    <span className="text-[11px] text-indigo-700 font-mono font-medium">DNI: {selectedCliente.documento}</span>
+                    <span className="font-bold text-xs block text-slate-900">{selectedCliente.nombre} {selectedCliente.apellido}</span>
+                    <span className="text-[11px] text-cyan-800 font-mono font-semibold">DNI: {selectedCliente.documento}</span>
                   </div>
                 </div>
                 <button
                   onClick={() => { setSelectedCliente(null); setSearch(""); }}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline"
+                  className="text-xs font-semibold text-cyan-700 hover:text-cyan-900 underline"
                 >
                   Cambiar
                 </button>
@@ -178,14 +178,14 @@ export default function PagosPage() {
                     onClick={() => setSelectedMembresia(m)}
                     className={`text-left p-3 rounded-lg border text-xs transition-all ${
                       isSelected
-                        ? "bg-indigo-50/80 border-indigo-500 ring-1 ring-indigo-500 text-indigo-950"
+                        ? "bg-cyan-50/90 border-cyan-500 ring-2 ring-cyan-500/30 text-slate-900"
                         : "bg-white border-slate-200 hover:border-slate-300"
                     }`}
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="font-semibold text-slate-900 block">{m.nombre}</span>
-                        <span className="text-[11px] text-slate-500">{m.diasDuracion} días</span>
+                        <span className="font-bold text-slate-900 block">{m.nombre}</span>
+                        <span className="text-[11px] text-slate-600">{m.diasDuracion} días</span>
                       </div>
                       <span className="font-bold font-mono text-slate-900 tabular-nums">{formatMoney(m.precio)}</span>
                     </div>
@@ -205,7 +205,7 @@ export default function PagosPage() {
               value={notas}
               onChange={e => setNotas(e.target.value)}
               placeholder="Ej: Pago en mostrador..."
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none placeholder-slate-400"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
             />
           </div>
 
@@ -213,7 +213,7 @@ export default function PagosPage() {
           <button
             onClick={handlePago}
             disabled={!selectedCliente || !selectedMembresia || loading}
-            className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5"
+            className="w-full py-2.5 px-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-1.5"
           >
             <CreditCard className="h-3.5 w-3.5" />
             <span>
@@ -230,28 +230,28 @@ export default function PagosPage() {
         <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+              <CreditCard className="h-3.5 w-3.5 text-cyan-600" />
               Cobros de la Fecha
             </h3>
-            <span className="text-[11px] text-slate-500 font-mono">
+            <span className="text-[11px] text-slate-600 font-mono font-semibold">
               {pagosHoy.length} pagos
             </span>
           </div>
 
           <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto text-xs">
             {pagosHoy.length === 0 ? (
-              <p className="p-8 text-xs text-slate-400 text-center font-medium">Sin cobros registrados en la fecha.</p>
+              <p className="p-8 text-xs text-slate-500 text-center font-medium">Sin cobros registrados en la fecha.</p>
             ) : (
               pagosHoy.map((p: any) => (
                 <div key={p.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50/70 transition">
                   <div>
                     <Link
                       href={`/dashboard/clientes/${p.clienteId}`}
-                      className="font-semibold text-slate-900 hover:text-indigo-600 transition block"
+                      className="font-bold text-slate-900 hover:text-cyan-700 transition block"
                     >
                       {p.cliente?.nombre} {p.cliente?.apellido}
                     </Link>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] text-slate-600">
                       {p.membresia?.nombre} · {new Date(p.fechaPago).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>

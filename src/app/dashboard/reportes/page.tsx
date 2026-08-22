@@ -82,10 +82,10 @@ export default function ReportesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs print:hidden">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-indigo-600" />
+            <BarChart3 className="h-5 w-5 text-cyan-600" />
             Reportes & Analíticas de Sede
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
             Métricas de ingresos, ventas en cantina y afluencia de socios en el período.
           </p>
         </div>
@@ -96,7 +96,7 @@ export default function ReportesPage() {
             <button
               onClick={() => applyPreset("hoy")}
               className={`px-2.5 py-1 rounded-md transition ${
-                preset === "hoy" ? "bg-white text-slate-900 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                preset === "hoy" ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Hoy
@@ -104,7 +104,7 @@ export default function ReportesPage() {
             <button
               onClick={() => applyPreset("semana")}
               className={`px-2.5 py-1 rounded-md transition ${
-                preset === "semana" ? "bg-white text-slate-900 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                preset === "semana" ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Últimos 7d
@@ -112,42 +112,42 @@ export default function ReportesPage() {
             <button
               onClick={() => applyPreset("mes")}
               className={`px-2.5 py-1 rounded-md transition ${
-                preset === "mes" ? "bg-white text-slate-900 shadow-xs font-semibold" : "text-slate-600 hover:text-slate-900"
+                preset === "mes" ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Este Mes
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700">
-            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+          <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800">
+            <Calendar className="h-3.5 w-3.5 text-cyan-600" />
             <input
               type="date"
               value={desde}
               onChange={e => { setDesde(e.target.value); setPreset("custom"); }}
-              className="bg-transparent border-none text-xs focus:outline-none font-mono"
+              className="bg-transparent border-none text-xs focus:outline-none font-mono font-bold text-slate-900"
             />
-            <span className="text-slate-400">a</span>
+            <span className="text-slate-500 font-bold">a</span>
             <input
               type="date"
               value={hasta}
               onChange={e => { setHasta(e.target.value); setPreset("custom"); }}
-              className="bg-transparent border-none text-xs focus:outline-none font-mono"
+              className="bg-transparent border-none text-xs focus:outline-none font-mono font-bold text-slate-900"
             />
           </div>
 
           <button
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-medium hover:bg-slate-800 shadow-2xs transition"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 shadow-2xs transition"
           >
-            <Printer className="h-3.5 w-3.5" />
+            <Printer className="h-3.5 w-3.5 text-cyan-400" />
             <span>Imprimir</span>
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-24 text-center text-slate-400 text-xs font-medium">Generando analíticas del período...</div>
+        <div className="py-24 text-center text-slate-500 text-xs font-medium">Generando analíticas del período...</div>
       ) : !stats ? (
         <div className="p-8 text-center text-slate-500 bg-white rounded-xl border border-slate-200/90 text-xs">
           No hay datos disponibles para el rango seleccionado.
@@ -158,27 +158,27 @@ export default function ReportesPage() {
           {/* Executive KPI Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Total Facturado</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total Facturado</span>
               <p className="text-lg font-bold font-mono text-slate-900 tabular-nums">{formatMoney(stats.totalFacturado)}</p>
-              <span className="text-[10px] text-emerald-600 font-medium block">Cobros + Ventas</span>
+              <span className="text-[10px] text-emerald-700 font-bold block">Cobros + Ventas</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Cobro de Cuotas</span>
-              <p className="text-lg font-bold font-mono text-indigo-700 tabular-nums">{formatMoney(stats.totalMembresias)}</p>
-              <span className="text-[10px] text-slate-500 font-medium block">{stats.pagosMembresias?.length || 0} cuotas</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Cobro de Cuotas</span>
+              <p className="text-lg font-bold font-mono text-cyan-700 tabular-nums">{formatMoney(stats.totalMembresias)}</p>
+              <span className="text-[10px] text-slate-600 font-medium block">{stats.pagosMembresias?.length || 0} cuotas</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Ventas Cantina</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Ventas Cantina</span>
               <p className="text-lg font-bold font-mono text-slate-900 tabular-nums">{formatMoney(stats.totalPOS)}</p>
-              <span className="text-[10px] text-slate-500 font-medium block">{stats.ventasPOS?.length || 0} tickets emitidos</span>
+              <span className="text-[10px] text-slate-600 font-medium block">{stats.ventasPOS?.length || 0} tickets emitidos</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs space-y-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Accesos Totales</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Accesos Totales</span>
               <p className="text-lg font-bold font-mono text-slate-900 tabular-nums">{stats.totalIngresos}</p>
-              <span className="text-[10px] text-slate-500 font-medium block">Ingresos por molinete</span>
+              <span className="text-[10px] text-slate-600 font-medium block">Ingresos por molinete</span>
             </div>
           </div>
 
@@ -187,10 +187,10 @@ export default function ReportesPage() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-indigo-600" />
+                  <Clock className="h-4 w-4 text-cyan-600" />
                   Afluencia Horaria (Horas Pico & Valle)
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Distribución de ingresos por franja horaria en la sede.</p>
+                <p className="text-xs text-slate-600 mt-0.5 font-medium">Distribución de ingresos por franja horaria en la sede.</p>
               </div>
             </div>
 
@@ -200,16 +200,16 @@ export default function ReportesPage() {
                 const pct = Math.round((h.cantidad / maxIngresosHora) * 100);
                 return (
                   <div key={h.hora} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
-                    <span className="text-[9px] font-mono text-slate-500 opacity-0 group-hover:opacity-100 transition">
+                    <span className="text-[9px] font-mono font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition">
                       {h.cantidad}
                     </span>
                     <div className="w-full bg-slate-100 rounded-t h-full flex items-end overflow-hidden">
                       <div
                         style={{ height: `${pct}%` }}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 transition rounded-t"
+                        className="w-full bg-gradient-to-t from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 transition rounded-t"
                       />
                     </div>
-                    <span className="text-[9px] text-slate-400 font-mono">{h.hora}h</span>
+                    <span className="text-[9px] text-slate-600 font-mono font-semibold">{h.hora}h</span>
                   </div>
                 );
               })}
@@ -222,13 +222,13 @@ export default function ReportesPage() {
             {/* Top Productos */}
             <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-                <Package className="h-4 w-4 text-slate-600" />
+                <Package className="h-4 w-4 text-cyan-600" />
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Top Productos Vendidos</h3>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                  <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                     <tr>
                       <th className="px-4 py-2">Producto</th>
                       <th className="px-4 py-2 text-center">Unidades</th>
@@ -238,15 +238,15 @@ export default function ReportesPage() {
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {stats.topProductos?.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center text-slate-400 font-medium">
+                        <td colSpan={3} className="px-4 py-6 text-center text-slate-500 font-medium">
                           Sin ventas en el período.
                         </td>
                       </tr>
                     ) : (
                       stats.topProductos?.map((p: any) => (
                         <tr key={p.productoId} className="hover:bg-slate-50/70 transition">
-                          <td className="px-4 py-2 font-medium text-slate-900">{p.nombre}</td>
-                          <td className="px-4 py-2 text-center font-mono">{p.cantidad}</td>
+                          <td className="px-4 py-2 font-bold text-slate-900">{p.nombre}</td>
+                          <td className="px-4 py-2 text-center font-mono font-semibold text-slate-800">{p.cantidad}</td>
                           <td className="px-4 py-2 text-right font-bold font-mono text-slate-900 tabular-nums">
                             {formatMoney(p.recaudado)}
                           </td>
@@ -261,13 +261,13 @@ export default function ReportesPage() {
             {/* Desglose de Cobros por Método */}
             <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-                <Receipt className="h-4 w-4 text-slate-600" />
+                <Receipt className="h-4 w-4 text-cyan-600" />
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Últimas Cuotas Cobradas</h3>
               </div>
 
               <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100 sticky top-0">
+                  <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200 sticky top-0">
                     <tr>
                       <th className="px-4 py-2">Socio</th>
                       <th className="px-4 py-2">Plan</th>
@@ -277,15 +277,15 @@ export default function ReportesPage() {
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {stats.pagosMembresias?.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-6 text-center text-slate-400 font-medium">
+                        <td colSpan={3} className="px-4 py-6 text-center text-slate-500 font-medium">
                           Sin cobros en el período.
                         </td>
                       </tr>
                     ) : (
                       stats.pagosMembresias?.slice(0, 10).map((p: any) => (
                         <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                          <td className="px-4 py-2 font-medium text-slate-900">{p.cliente?.nombre} {p.cliente?.apellido}</td>
-                          <td className="px-4 py-2 text-slate-600">{p.membresia?.nombre}</td>
+                          <td className="px-4 py-2 font-bold text-slate-900">{p.cliente?.nombre} {p.cliente?.apellido}</td>
+                          <td className="px-4 py-2 text-slate-700 font-medium">{p.membresia?.nombre}</td>
                           <td className="px-4 py-2 text-right font-bold font-mono text-slate-900 tabular-nums">
                             {formatMoney(Number(p.monto))}
                           </td>

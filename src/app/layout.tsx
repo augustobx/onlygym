@@ -6,7 +6,7 @@ import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
-  themeColor: "#4338ca",
+  themeColor: "#0891b2",
   width: "device-width",
   initialScale: 1,
 };
@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-slate-900 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white`}>
+      <body className={`${inter.className} bg-slate-900 text-slate-100 antialiased selection:bg-cyan-500 selection:text-white`}>
         <ServiceWorkerRegister />
         {children}
       </body>

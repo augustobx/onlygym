@@ -107,13 +107,13 @@ export default function NuevoClientePage() {
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/clientes"
-            className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition shadow-2xs"
+            className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shadow-2xs"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Alta de Nuevo Socio</h2>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
               Crea el perfil del socio, habilita sus credenciales PWA y su cuenta corriente automáticamente.
             </p>
           </div>
@@ -121,8 +121,8 @@ export default function NuevoClientePage() {
       </div>
 
       {error && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-medium flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 text-rose-600" />
+        <div className="p-3 bg-rose-50 border border-rose-300 text-rose-900 rounded-lg text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0 text-rose-700" />
           <span>{error}</span>
         </div>
       )}
@@ -131,7 +131,7 @@ export default function NuevoClientePage() {
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-5">
         
         {/* Foto & Upload Box */}
-        <div className="flex items-center gap-4 p-4 bg-slate-50/70 rounded-lg border border-slate-200/80">
+        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
           <div className="relative flex-shrink-0">
             {fotoBase64 ? (
               <img
@@ -156,15 +156,15 @@ export default function NuevoClientePage() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-900">Fotografía de Reconocimiento</p>
-            <p className="text-[11px] text-slate-500">Visible en pantalla de molinete y credencial del socio.</p>
+            <p className="text-xs font-bold text-slate-900">Fotografía de Reconocimiento</p>
+            <p className="text-[11px] text-slate-600">Visible en pantalla de molinete y credencial del socio.</p>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md text-xs font-medium shadow-2xs transition"
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 rounded-md text-xs font-medium shadow-2xs transition"
             >
-              <Upload className="h-3.5 w-3.5 text-slate-500" />
+              <Upload className="h-3.5 w-3.5 text-cyan-600" />
               <span>{fotoBase64 ? "Cambiar Foto" : "Subir Foto"}</span>
             </button>
           </div>
@@ -173,65 +173,65 @@ export default function NuevoClientePage() {
         {/* Datos Personales */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Nombre *</label>
+            <label className="block font-bold text-slate-700 mb-1">Nombre *</label>
             <input
               type="text"
               name="nombre"
               required
               placeholder="Ej: Juan"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Apellido *</label>
+            <label className="block font-bold text-slate-700 mb-1">Apellido *</label>
             <input
               type="text"
               name="apellido"
               required
               placeholder="Ej: Pérez"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">DNI (Documento) *</label>
+            <label className="block font-bold text-slate-700 mb-1">DNI (Documento) *</label>
             <input
               type="text"
               name="documento"
               required
               placeholder="Ej: 38450123"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-mono font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-mono font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Teléfono / WhatsApp</label>
+            <label className="block font-bold text-slate-700 mb-1">Teléfono / WhatsApp</label>
             <input
               type="text"
               name="telefono"
               placeholder="Ej: 1123456789"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none font-mono"
             />
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Email</label>
+            <label className="block font-bold text-slate-700 mb-1">Email</label>
             <input
               type="email"
               name="email"
               placeholder="Ej: juan@email.com"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">Dirección</label>
+            <label className="block font-bold text-slate-700 mb-1">Dirección</label>
             <input
               type="text"
               name="direccion"
               placeholder="Ej: Av. San Martín 123"
-              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
             />
           </div>
         </div>
@@ -245,15 +245,15 @@ export default function NuevoClientePage() {
             {sucursales.map(s => (
               <label
                 key={s.id}
-                className="flex items-center gap-2 p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition"
+                className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition"
               >
                 <input
                   type="checkbox"
                   checked={selectedSucursales.includes(s.id)}
                   onChange={() => handleCheckboxChange(s.id)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                  className="rounded text-cyan-600 focus:ring-cyan-500 h-4 w-4"
                 />
-                <span className="font-medium text-slate-800">{s.nombre}</span>
+                <span className="font-semibold text-slate-900">{s.nombre}</span>
               </label>
             ))}
           </div>
@@ -263,14 +263,14 @@ export default function NuevoClientePage() {
         <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
           <Link
             href="/dashboard/clientes"
-            className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 transition"
+            className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-2xs disabled:opacity-50 transition"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 transition"
           >
             <Save className="h-3.5 w-3.5" />
             <span>{loading ? "Guardando socio..." : "Crear Socio (3-en-1)"}</span>

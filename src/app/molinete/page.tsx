@@ -189,7 +189,7 @@ export default function MolinetePage() {
         <div className="absolute top-5 left-5 right-5 flex items-center justify-between z-20">
           <button 
             onClick={() => router.push("/dashboard")}
-            className="flex items-center text-slate-300 hover:text-white bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+            className="flex items-center text-slate-300 hover:text-white bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
           >
             <LogOut className="w-3.5 h-3.5 mr-1.5" />
             <span>Panel Admin</span>
@@ -204,7 +204,7 @@ export default function MolinetePage() {
               {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5 text-rose-400" />}
             </button>
 
-            <span className="text-xs font-medium text-slate-300 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg">
+            <span className="text-xs font-bold text-slate-200 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg">
               📍 {sucursalName}
             </span>
           </div>
@@ -220,7 +220,7 @@ export default function MolinetePage() {
                 <img
                   src={ultimoResultado.clienteFoto}
                   alt={ultimoResultado.clienteNombre || "Socio"}
-                  className="w-44 h-44 sm:w-52 sm:h-52 rounded-xl object-cover border-2 border-white/80 shadow-2xl"
+                  className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl object-cover border-2 border-white/80 shadow-2xl"
                 />
                 <div className="absolute -bottom-2 -right-2 p-1.5 bg-slate-950 rounded-full shadow-lg border border-slate-800">
                   {ultimoResultado.estado === "ACTIVO" ? (
@@ -233,22 +233,22 @@ export default function MolinetePage() {
             ) : (
               <div>
                 {ultimoResultado.estado === "ESPERANDO" && (
-                  <div className="w-36 h-36 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-lg">
-                    <ScanFace className="w-16 h-16 text-slate-500 animate-pulse" />
+                  <div className="w-36 h-36 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-lg">
+                    <ScanFace className="w-16 h-16 text-cyan-400 animate-pulse" />
                   </div>
                 )}
                 {ultimoResultado.estado === "ACTIVO" && (
-                  <div className="w-36 h-36 rounded-xl bg-emerald-900/60 border border-emerald-500/50 flex items-center justify-center shadow-lg">
+                  <div className="w-36 h-36 rounded-2xl bg-emerald-900/60 border border-emerald-500/50 flex items-center justify-center shadow-lg">
                     <CheckCircle2 className="w-20 h-20 text-emerald-400" />
                   </div>
                 )}
                 {(ultimoResultado.estado === "VENCIDO" || ultimoResultado.estado === "DENEGADO") && (
-                  <div className="w-36 h-36 rounded-xl bg-rose-900/60 border border-rose-500/50 flex items-center justify-center shadow-lg">
+                  <div className="w-36 h-36 rounded-2xl bg-rose-900/60 border border-rose-500/50 flex items-center justify-center shadow-lg">
                     <XCircle className="w-20 h-20 text-rose-400" />
                   </div>
                 )}
                 {ultimoResultado.estado === "ERROR" && (
-                  <div className="w-36 h-36 rounded-xl bg-amber-900/60 border border-amber-500/50 flex items-center justify-center shadow-lg">
+                  <div className="w-36 h-36 rounded-2xl bg-amber-900/60 border border-amber-500/50 flex items-center justify-center shadow-lg">
                     <AlertCircle className="w-20 h-20 text-amber-400" />
                   </div>
                 )}
@@ -258,13 +258,13 @@ export default function MolinetePage() {
 
           {/* Nombre */}
           {ultimoResultado.clienteNombre && (
-            <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-white">
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
               {ultimoResultado.clienteNombre}
             </h1>
           )}
           
           {/* Mensaje de Estado */}
-          <h2 className="text-lg sm:text-2xl font-medium text-slate-200">
+          <h2 className="text-lg sm:text-2xl font-bold text-slate-100">
             {ultimoResultado.mensaje}
           </h2>
         </div>
@@ -277,7 +277,7 @@ export default function MolinetePage() {
             value={dni}
             onChange={(e) => setDni(e.target.value)}
             placeholder="DNI o Tarjeta..."
-            className="px-3 py-1.5 rounded-lg text-xs bg-slate-900 text-white placeholder-slate-500 border border-slate-700 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="px-3 py-1.5 rounded-lg text-xs bg-slate-900 text-white placeholder-slate-500 border border-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
             autoFocus
             autoComplete="off"
           />
@@ -288,10 +288,10 @@ export default function MolinetePage() {
       <div className="w-full lg:w-80 bg-slate-900/90 border-t lg:border-t-0 lg:border-l border-slate-800 p-4 flex flex-col">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
           <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-indigo-400" />
+            <Clock className="h-3.5 w-3.5 text-cyan-400" />
             <span>Últimos Accesos</span>
           </h3>
-          <span className="text-[10px] text-slate-500 font-mono">En vivo</span>
+          <span className="text-[10px] text-cyan-400 font-mono font-bold">En vivo</span>
         </div>
         
         <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] lg:max-h-none pr-1">
@@ -301,26 +301,26 @@ export default function MolinetePage() {
             return (
               <div 
                 key={ingreso.id} 
-                className={`p-2.5 rounded-lg border text-xs flex justify-between items-center ${
+                className={`p-2.5 rounded-xl border text-xs flex justify-between items-center ${
                   esOk 
                     ? "bg-slate-950 border-slate-800" 
                     : "bg-rose-950/40 border-rose-900/60"
                 }`}
               >
                 <div className="min-w-0 pr-2">
-                  <p className="font-semibold text-white truncate">
+                  <p className="font-bold text-white truncate">
                     {ingreso.cliente?.nombre} {ingreso.cliente?.apellido}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-mono">DNI: {ingreso.documento}</p>
+                  <p className="text-[10px] text-slate-400 font-mono font-medium">DNI: {ingreso.documento}</p>
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
                     esOk ? "bg-emerald-950 text-emerald-400 border-emerald-800" : "bg-rose-950 text-rose-400 border-rose-800"
                   }`}>
                     {esOk ? "PERMITIDO" : ingreso.estado}
                   </span>
-                  <p className="text-[9px] text-slate-500 mt-0.5 font-mono">
+                  <p className="text-[9px] text-slate-500 mt-0.5 font-mono font-semibold">
                     {new Date(ingreso.fechaHora).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>

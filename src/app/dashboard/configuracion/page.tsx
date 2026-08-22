@@ -105,10 +105,10 @@ export default function ConfiguracionPage() {
     });
   };
 
-  // Handlers Membresía
+  // Handlers Membresías
   const openNewMembresia = () => {
     setEditandoMembresia(null);
-    setFormMembresia({ nombre: "", diasDuracion: "", precio: "", descripcion: "" });
+    setFormMembresia({ nombre: "", diasDuracion: "30", precio: "", descripcion: "" });
     setShowModalMembresia(true);
   };
 
@@ -138,7 +138,7 @@ export default function ConfiguracionPage() {
 
     if (res.success) {
       setShowModalMembresia(false);
-      setMsg({ type: "success", text: editandoMembresia ? "Membresía actualizada" : "Membresía creada" });
+      setMsg({ type: "success", text: editandoMembresia ? "Plan actualizado" : "Plan creado con éxito" });
       loadMembresias();
       setTimeout(() => setMsg(null), 3000);
     } else {
@@ -147,33 +147,40 @@ export default function ConfiguracionPage() {
   };
 
   const handleToggleMembresia = async (m: any) => {
-    await toggleMembresiaEstado(m.id, m.estado);
-    loadMembresias();
+    const res = await toggleMembresiaEstado(m.id, m.estado);
+    if (res.success) {
+      const nuevo = m.estado === "activo" ? "inactivo" : "activo";
+      setMsg({ type: "success", text: `Plan '${m.nombre}' actualizado a ${nuevo}` });
+      loadMembresias();
+      setTimeout(() => setMsg(null), 3000);
+    }
   };
 
   // Handlers Horarios
-  const handleHorarioFieldChange = (index: number, field: string, val: any) => {
-    const updated = [...horarios];
-    updated[index] = { ...updated[index], [field]: val };
-    setHorarios(updated);
+  const handleHorarioFieldChange = (index: number, field: string, value: any) => {
+    setHorarios(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   };
 
   const handleGuardarHorarios = async () => {
     setGuardandoHorarios(true);
-    const inputs: HorarioDiaInput[] = horarios.map(h => ({
+    const payload: HorarioDiaInput[] = horarios.map(h => ({
       diaSemana: h.diaSemana,
       tipoApertura: h.tipoApertura,
       horaApertura1: h.horaApertura1,
       horaCierre1: h.horaCierre1,
-      horaApertura2: h.horaApertura2,
-      horaCierre2: h.horaCierre2,
-      capacidadMaxima: Number(h.capacidadMaxima) || 50,
+      horaApertura2: h.horaApertura2 || undefined,
+      horaCierre2: h.horaCierre2 || undefined,
       activo: h.activo,
+      capacidadMaxima: Number(h.capacidadMaxima || 50),
     }));
 
-    const res = await guardarHorariosSemana(sucursalId, inputs);
+    const res = await guardarHorariosSemana(sucursalId, payload);
     if (res.success) {
-      setMsg({ type: "success", text: "Horarios y aforo semanal guardados correctamente." });
+      setMsg({ type: "success", text: "Horarios y aforo de la sede guardados correctamente." });
       loadHorarios(sucursalId);
       setTimeout(() => setMsg(null), 3000);
     } else {
@@ -242,10 +249,10 @@ export default function ConfiguracionPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Settings className="h-5 w-5 text-indigo-600" />
+            <Settings className="h-5 w-5 text-cyan-600" />
             Configuración del Sistema
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
             Planes de membresía, horarios y aforo por sede, y gestión de sucursales.
           </p>
         </div>
@@ -256,11 +263,11 @@ export default function ConfiguracionPage() {
             onClick={() => setActiveTab("membresias")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
               activeTab === "membresias"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
+                ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <CreditCard className="h-3.5 w-3.5" />
+            <CreditCard className="h-3.5 w-3.5 text-cyan-600" />
             <span>Membresías</span>
           </button>
 
@@ -268,11 +275,11 @@ export default function ConfiguracionPage() {
             onClick={() => setActiveTab("horarios")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
               activeTab === "horarios"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
+                ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Clock className="h-3.5 w-3.5" />
+            <Clock className="h-3.5 w-3.5 text-cyan-600" />
             <span>Horarios & Aforo</span>
           </button>
 
@@ -280,23 +287,23 @@ export default function ConfiguracionPage() {
             onClick={() => setActiveTab("sucursales")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
               activeTab === "sucursales"
-                ? "bg-white text-slate-900 shadow-xs font-semibold"
+                ? "bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            <Building2 className="h-3.5 w-3.5" />
+            <Building2 className="h-3.5 w-3.5 text-cyan-600" />
             <span>Sedes ({sucursales.length})</span>
           </button>
         </div>
       </div>
 
       {msg && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 border ${
+        <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border ${
           msg.type === "success" 
-            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
-            : "bg-rose-50 text-rose-800 border-rose-200"
+            ? "bg-emerald-50 text-emerald-900 border-emerald-300" 
+            : "bg-rose-50 text-rose-900 border-rose-300"
         }`}>
-          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-rose-600" />}
+          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertCircle className="h-4 w-4 text-rose-700" />}
           <span>{msg.text}</span>
         </div>
       )}
@@ -307,11 +314,11 @@ export default function ConfiguracionPage() {
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Catálogo de Planes</h3>
-              <p className="text-xs text-slate-500">Define los planes de acceso, duración y precios.</p>
+              <p className="text-xs text-slate-600 font-medium">Define los planes de acceso, duración y precios.</p>
             </div>
             <button
               onClick={openNewMembresia}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition"
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Nuevo Plan</span>
@@ -321,7 +328,7 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100 text-xs">
-                <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-2.5 text-left">Plan</th>
                     <th className="px-4 py-2.5 text-left">Duración</th>
@@ -335,12 +342,12 @@ export default function ConfiguracionPage() {
                   {membresias.map(m => (
                     <tr key={m.id} className="hover:bg-slate-50/70 transition">
                       <td className="px-4 py-2.5 font-bold text-slate-900">{m.nombre}</td>
-                      <td className="px-4 py-2.5 font-mono">{m.diasDuracion} días</td>
-                      <td className="px-4 py-2.5 text-slate-500 max-w-xs truncate">{m.descripcion || "—"}</td>
+                      <td className="px-4 py-2.5 font-mono font-semibold text-slate-700">{m.diasDuracion} días</td>
+                      <td className="px-4 py-2.5 text-slate-600 max-w-xs truncate">{m.descripcion || "—"}</td>
                       <td className="px-4 py-2.5 text-right font-bold font-mono text-slate-900 tabular-nums">{formatMoney(Number(m.precio))}</td>
                       <td className="px-4 py-2.5 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          m.estado === "activo" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          m.estado === "activo" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-slate-100 text-slate-700 border-slate-300"
                         }`}>
                           {m.estado === "activo" ? "● Activo" : "● Inactivo"}
                         </span>
@@ -348,13 +355,13 @@ export default function ConfiguracionPage() {
                       <td className="px-4 py-2.5 text-right space-x-1">
                         <button
                           onClick={() => openEditMembresia(m)}
-                          className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-cyan-50 hover:text-cyan-800 text-slate-800 rounded-md text-xs font-semibold border border-slate-300 transition"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleToggleMembresia(m)}
-                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-500 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-600 rounded-md text-xs font-medium border border-slate-300 transition"
                         >
                           {m.estado === "activo" ? "Desactivar" : "Activar"}
                         </button>
@@ -376,12 +383,12 @@ export default function ConfiguracionPage() {
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 Horarios & Capacidad Máxima — {sucursalNombre}
               </h3>
-              <p className="text-xs text-slate-500">Configura apertura, corte de turno y aforo para cada día.</p>
+              <p className="text-xs text-slate-600 font-medium">Configura apertura, corte de turno y aforo para cada día.</p>
             </div>
             <button
               onClick={handleGuardarHorarios}
               disabled={guardandoHorarios}
-              className="inline-flex items-center gap-1 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs disabled:opacity-50 transition"
+              className="inline-flex items-center gap-1 px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs disabled:opacity-50 transition"
             >
               <Save className="h-3.5 w-3.5" />
               <span>{guardandoHorarios ? "Guardando..." : "Guardar Horarios"}</span>
@@ -391,7 +398,7 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100 text-xs">
-                <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-2.5 text-left">Día</th>
                     <th className="px-4 py-2.5 text-center">Estado</th>
@@ -411,7 +418,7 @@ export default function ConfiguracionPage() {
                             type="checkbox"
                             checked={h.activo}
                             onChange={e => handleHorarioFieldChange(idx, "activo", e.target.checked)}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                            className="rounded text-cyan-600 focus:ring-cyan-500 h-4 w-4"
                           />
                         </label>
                       </td>
@@ -419,7 +426,7 @@ export default function ConfiguracionPage() {
                         <select
                           value={h.tipoApertura}
                           onChange={e => handleHorarioFieldChange(idx, "tipoApertura", e.target.value)}
-                          className="bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-xs focus:outline-none"
+                          className="bg-white border border-slate-300 text-slate-900 rounded px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                         >
                           <option value="corrido">Corrido</option>
                           <option value="cortado">Cortado (2 turnos)</option>
@@ -431,14 +438,14 @@ export default function ConfiguracionPage() {
                             type="time"
                             value={h.horaApertura1}
                             onChange={e => handleHorarioFieldChange(idx, "horaApertura1", e.target.value)}
-                            className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-900"
+                            className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-slate-900 font-bold"
                           />
-                          <span>a</span>
+                          <span className="text-slate-600 font-bold">a</span>
                           <input
                             type="time"
                             value={h.horaCierre1}
                             onChange={e => handleHorarioFieldChange(idx, "horaCierre1", e.target.value)}
-                            className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-900"
+                            className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-slate-900 font-bold"
                           />
                         </div>
                       </td>
@@ -449,14 +456,14 @@ export default function ConfiguracionPage() {
                               type="time"
                               value={h.horaApertura2 || ""}
                               onChange={e => handleHorarioFieldChange(idx, "horaApertura2", e.target.value)}
-                              className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-900"
+                              className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-slate-900 font-bold"
                             />
-                            <span>a</span>
+                            <span className="text-slate-600 font-bold">a</span>
                             <input
                               type="time"
                               value={h.horaCierre2 || ""}
                               onChange={e => handleHorarioFieldChange(idx, "horaCierre2", e.target.value)}
-                              className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-900"
+                              className="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-slate-900 font-bold"
                             />
                           </div>
                         ) : (
@@ -468,7 +475,7 @@ export default function ConfiguracionPage() {
                           type="number"
                           value={h.capacidadMaxima}
                           onChange={e => handleHorarioFieldChange(idx, "capacidadMaxima", e.target.value)}
-                          className="w-14 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-center font-mono text-slate-900 font-semibold"
+                          className="w-14 bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs text-center font-mono text-slate-900 font-bold"
                         />
                       </td>
                     </tr>
@@ -486,11 +493,11 @@ export default function ConfiguracionPage() {
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Gestión de Sedes</h3>
-              <p className="text-xs text-slate-500">Agrega o administra las sedes del gimnasio.</p>
+              <p className="text-xs text-slate-600 font-medium">Agrega o administra las sedes del gimnasio.</p>
             </div>
             <button
               onClick={openNewSucursal}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition"
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Nueva Sede</span>
@@ -500,7 +507,7 @@ export default function ConfiguracionPage() {
           <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100 text-xs">
-                <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-2.5 text-left">Sede</th>
                     <th className="px-4 py-2.5 text-left">Dirección</th>
@@ -514,15 +521,15 @@ export default function ConfiguracionPage() {
                   {sucursales.map(s => (
                     <tr key={s.id} className="hover:bg-slate-50/70 transition">
                       <td className="px-4 py-2.5 font-bold text-slate-900 flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-indigo-600 flex-shrink-0" />
+                        <Building2 className="h-3.5 w-3.5 text-cyan-600 flex-shrink-0" />
                         <span>{s.nombre}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500">{s.direccion || "—"}</td>
-                      <td className="px-4 py-2.5 text-center font-mono">{s.capacidadMaxima} pers.</td>
+                      <td className="px-4 py-2.5 text-slate-600">{s.direccion || "—"}</td>
+                      <td className="px-4 py-2.5 text-center font-mono font-semibold text-slate-800">{s.capacidadMaxima} pers.</td>
                       <td className="px-4 py-2.5 text-center font-mono font-bold text-slate-900">{s._count?.clientes || 0}</td>
                       <td className="px-4 py-2.5 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          s.estado === "activo" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          s.estado === "activo" ? "bg-emerald-50 text-emerald-800 border-emerald-300" : "bg-slate-100 text-slate-700 border-slate-300"
                         }`}>
                           {s.estado === "activo" ? "● Activa" : "● Inactiva"}
                         </span>
@@ -530,13 +537,13 @@ export default function ConfiguracionPage() {
                       <td className="px-4 py-2.5 text-right space-x-1">
                         <button
                           onClick={() => openEditSucursal(s)}
-                          className="px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-cyan-50 hover:text-cyan-800 text-slate-800 rounded-md text-xs font-semibold border border-slate-300 transition"
                         >
                           Editar
                         </button>
                         <button
                           onClick={() => handleToggleSucursal(s)}
-                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-500 rounded-md text-xs font-medium border border-slate-200 transition"
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-600 rounded-md text-xs font-medium border border-slate-300 transition"
                         >
                           {s.estado === "activo" ? "Desactivar" : "Activar"}
                         </button>
@@ -552,43 +559,43 @@ export default function ConfiguracionPage() {
 
       {/* Modal Membresía */}
       {showModalMembresia && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {editandoMembresia ? "Editar Plan" : "Nuevo Plan de Membresía"}
               </h3>
-              <button onClick={() => setShowModalMembresia(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModalMembresia(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitMembresia} className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Nombre del Plan *</label>
+                <label className="block font-bold text-slate-700 mb-1">Nombre del Plan *</label>
                 <input
                   required
                   value={formMembresia.nombre}
                   onChange={e => setFormMembresia({ ...formMembresia, nombre: e.target.value })}
                   placeholder="Ej: Pase Mensual Full"
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none font-bold"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Duración (Días) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Duración (Días) *</label>
                   <input
                     type="number"
                     required
                     value={formMembresia.diasDuracion}
                     onChange={e => setFormMembresia({ ...formMembresia, diasDuracion: e.target.value })}
                     placeholder="30"
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Precio ($) *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Precio ($) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -596,19 +603,19 @@ export default function ConfiguracionPage() {
                     value={formMembresia.precio}
                     onChange={e => setFormMembresia({ ...formMembresia, precio: e.target.value })}
                     placeholder="15000"
-                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Descripción</label>
+                <label className="block font-bold text-slate-700 mb-1">Descripción</label>
                 <textarea
                   rows={2}
                   value={formMembresia.descripcion}
                   onChange={e => setFormMembresia({ ...formMembresia, descripcion: e.target.value })}
                   placeholder="Acceso libre a sala de musculación..."
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                 />
               </div>
 
@@ -616,13 +623,13 @@ export default function ConfiguracionPage() {
                 <button
                   type="button"
                   onClick={() => setShowModalMembresia(false)}
-                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-semibold shadow-2xs transition"
+                  className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg py-2 text-xs font-semibold shadow-xs transition"
                 >
                   {editandoMembresia ? "Guardar" : "Crear Plan"}
                 </button>
@@ -634,47 +641,47 @@ export default function ConfiguracionPage() {
 
       {/* Modal Sucursal */}
       {showModalSucursal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {editandoSucursal ? "Editar Sede" : "Nueva Sede / Sucursal"}
               </h3>
-              <button onClick={() => setShowModalSucursal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowModalSucursal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitSucursal} className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Nombre de la Sede *</label>
+                <label className="block font-bold text-slate-700 mb-1">Nombre de la Sede *</label>
                 <input
                   required
                   value={formSucursal.nombre}
                   onChange={e => setFormSucursal({ ...formSucursal, nombre: e.target.value })}
                   placeholder="Ej: Sede Centro"
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-medium"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none font-bold"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Dirección</label>
+                <label className="block font-bold text-slate-700 mb-1">Dirección</label>
                 <input
                   value={formSucursal.direccion}
                   onChange={e => setFormSucursal({ ...formSucursal, direccion: e.target.value })}
                   placeholder="Ej: Av. Principal 450"
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Capacidad Máxima (Aforo)</label>
+                <label className="block font-bold text-slate-700 mb-1">Capacidad Máxima (Aforo)</label>
                 <input
                   type="number"
                   required
                   value={formSucursal.capacidadMaxima}
                   onChange={e => setFormSucursal({ ...formSucursal, capacidadMaxima: e.target.value })}
-                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg px-2.5 py-1.5 font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none"
                 />
               </div>
 
@@ -682,14 +689,14 @@ export default function ConfiguracionPage() {
                 <button
                   type="button"
                   onClick={() => setShowModalSucursal(false)}
-                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                  className="flex-1 bg-white border border-slate-300 rounded-lg py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={guardandoSucursal}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-xs font-semibold shadow-2xs transition"
+                  className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg py-2 text-xs font-semibold shadow-xs transition"
                 >
                   {guardandoSucursal ? "Guardando..." : editandoSucursal ? "Guardar" : "Crear Sede"}
                 </button>

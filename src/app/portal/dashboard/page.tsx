@@ -106,24 +106,26 @@ export default function PortalDashboardPage() {
     setPasswordError(null);
 
     if (nuevaPassword.length < 6) {
-      setPasswordError("La contraseña debe tener al menos 6 caracteres.");
+      setPasswordError("La contraseña debe tener al menos 6 caracteres");
       return;
     }
-
     if (nuevaPassword !== confirmPassword) {
-      setPasswordError("Las contraseñas no coinciden.");
+      setPasswordError("Las contraseñas no coinciden");
       return;
     }
 
     setChangingPassword(true);
     const res = await cambiarPasswordPortal(nuevaPassword);
+
     if (res.success) {
       setShowPasswordModal(false);
-      setMsg({ type: "success", text: "Tu contraseña fue actualizada con éxito." });
-      loadPortal();
-      setTimeout(() => setMsg(null), 3500);
+      setNuevaPassword("");
+      setConfirmPassword("");
+      setMsg({ type: "success", text: "Contraseña actualizada exitosamente." });
+      setData((prev: any) => ({ ...prev, debeCambiarPassword: false }));
+      setTimeout(() => setMsg(null), 3000);
     } else {
-      setPasswordError(res.error || "Error al cambiar contraseña");
+      setPasswordError(res.error || "Error al actualizar contraseña");
     }
     setChangingPassword(false);
   };
@@ -131,14 +133,12 @@ export default function PortalDashboardPage() {
   const handleOpenTicket = async (concepto: string) => {
     const match = concepto.match(/#(\d+)/);
     if (!match) return;
+    const ticketId = parseInt(match[1]);
 
-    const ticketId = Number(match[1]);
     setLoadingTicket(true);
     const res = await getDetalleTicketVenta(ticketId);
     if (res.success && res.data) {
       setTicketModal(res.data);
-    } else {
-      alert("No se pudo cargar el ticket.");
     }
     setLoadingTicket(false);
   };
@@ -146,8 +146,8 @@ export default function PortalDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-3 text-white">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-        <p className="text-xs font-medium text-slate-400">Accediendo a tu cuenta...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+        <p className="text-xs font-semibold text-slate-400">Accediendo a tu cuenta...</p>
       </div>
     );
   }
@@ -176,7 +176,7 @@ export default function PortalDashboardPage() {
   const movimientosCuenta = data.cuentaCorriente?.movimientos || [];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 selection:bg-indigo-500 selection:text-white overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 selection:bg-cyan-500 selection:text-white overflow-x-hidden">
       
       {/* Top Navbar */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-2.5">
@@ -189,13 +189,13 @@ export default function PortalDashboardPage() {
                 className="w-8 h-8 rounded-lg object-cover border border-slate-700 flex-shrink-0"
               />
             ) : (
-              <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs flex-shrink-0">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold shadow-xs flex-shrink-0">
                 <Dumbbell className="w-4 h-4" />
               </div>
             )}
             <div className="truncate">
               <span className="text-xs font-bold text-white block leading-none truncate">GymLink Socio</span>
-              <span className="text-[10px] text-slate-400 font-medium truncate block mt-0.5">{data.nombre} {data.apellido}</span>
+              <span className="text-[10px] text-cyan-400 font-semibold truncate block mt-0.5">{data.nombre} {data.apellido}</span>
             </div>
           </div>
 
@@ -232,7 +232,7 @@ export default function PortalDashboardPage() {
         
         {/* Banner Alert */}
         {msg && (
-          <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-medium text-center flex items-center justify-center gap-2">
+          <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
             <span>{msg.text}</span>
           </div>
@@ -247,7 +247,7 @@ export default function PortalDashboardPage() {
             onClick={() => setActiveTab("carnet")}
             className={`flex-1 min-w-[85px] py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === "carnet"
-                ? "bg-indigo-600 text-white font-semibold shadow-xs"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-xs"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             }`}
           >
@@ -259,7 +259,7 @@ export default function PortalDashboardPage() {
             onClick={() => setActiveTab("cuenta")}
             className={`flex-1 min-w-[95px] py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === "cuenta"
-                ? "bg-indigo-600 text-white font-semibold shadow-xs"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-xs"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             }`}
           >
@@ -271,7 +271,7 @@ export default function PortalDashboardPage() {
             onClick={() => setActiveTab("pagos")}
             className={`flex-1 min-w-[90px] py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === "pagos"
-                ? "bg-indigo-600 text-white font-semibold shadow-xs"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-xs"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             }`}
           >
@@ -283,7 +283,7 @@ export default function PortalDashboardPage() {
             onClick={() => setActiveTab("asistencias")}
             className={`flex-1 min-w-[90px] py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === "asistencias"
-                ? "bg-indigo-600 text-white font-semibold shadow-xs"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-xs"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             }`}
           >
@@ -295,7 +295,7 @@ export default function PortalDashboardPage() {
             onClick={() => setActiveTab("aforo")}
             className={`flex-1 min-w-[75px] py-1.5 px-2.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === "aforo"
-                ? "bg-indigo-600 text-white font-semibold shadow-xs"
+                ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-xs"
                 : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
             }`}
           >
@@ -309,21 +309,21 @@ export default function PortalDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
             
             {/* Apple Wallet / Metal Pass Card */}
-            <div className="md:col-span-7 bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-4 relative">
+            <div className="md:col-span-7 bg-slate-900 rounded-2xl p-5 border border-slate-800 shadow-xl space-y-4 relative">
               {/* Header Pass */}
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
+                  <div className="h-7 w-7 rounded-md bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold shadow-xs">
                     <Dumbbell className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-white">GymLink Club</h3>
-                    <span className="text-[9px] text-slate-400 uppercase tracking-widest font-mono">Pase de Acceso</span>
+                    <span className="text-[9px] text-cyan-400 uppercase tracking-widest font-mono">Pase de Acceso</span>
                   </div>
                 </div>
 
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                     estadoAcceso === "ACTIVO"
                       ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/50"
                       : "bg-rose-950/60 text-rose-400 border-rose-800/50"
@@ -341,47 +341,47 @@ export default function PortalDashboardPage() {
                       <img
                         src={data.foto}
                         alt={data.nombre}
-                        className="w-12 h-12 rounded-lg object-cover border border-slate-700"
+                        className="w-12 h-12 rounded-xl object-cover border border-slate-700"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-lg bg-slate-800 text-white font-bold text-base flex items-center justify-center border border-slate-700">
+                      <div className="w-12 h-12 rounded-xl bg-slate-800 text-white font-bold text-base flex items-center justify-center border border-slate-700">
                         {data.nombre.charAt(0)}{data.apellido.charAt(0)}
                       </div>
                     )}
                     <div>
                       <h2 className="text-base font-bold text-white leading-tight">{data.nombre} {data.apellido}</h2>
-                      <span className="text-xs font-mono text-slate-400 font-medium">DNI: {data.documento}</span>
+                      <span className="text-xs font-mono text-cyan-400 font-semibold">DNI: {data.documento}</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-left">
+                  <div className="grid grid-cols-2 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-left">
                     <div>
-                      <span className="text-[9px] text-slate-500 font-semibold uppercase block">Plan</span>
-                      <p className="text-xs font-semibold text-slate-200 truncate">{ultimoPago?.membresia?.nombre || "Sin Plan"}</p>
+                      <span className="text-[9px] text-slate-500 font-bold uppercase block">Plan</span>
+                      <p className="text-xs font-bold text-slate-200 truncate">{ultimoPago?.membresia?.nombre || "Sin Plan"}</p>
                     </div>
                     <div>
-                      <span className="text-[9px] text-slate-500 font-semibold uppercase block">Vence</span>
-                      <p className="text-xs font-medium font-mono text-slate-200">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase block">Vence</span>
+                      <p className="text-xs font-bold font-mono text-slate-200">
                         {fechaVencimiento ? formatDate(fechaVencimiento.toISOString()) : "—"}
                       </p>
                     </div>
                   </div>
 
                   {estadoAcceso === "ACTIVO" && (
-                    <p className="text-[11px] text-emerald-400 font-medium">
+                    <p className="text-[11px] text-emerald-400 font-semibold">
                       ✓ {diasRestantes} días de acceso restantes
                     </p>
                   )}
                 </div>
 
                 {/* QR Canvas */}
-                <div className="flex flex-col items-center gap-1.5 bg-white p-2.5 rounded-lg shadow-sm flex-shrink-0">
+                <div className="flex flex-col items-center gap-1.5 bg-white p-2.5 rounded-xl shadow-md flex-shrink-0">
                   <QRCodeDisplay value={data.documento} size={115} />
                   <button
                     onClick={() => setShowQrModal(true)}
-                    className="w-full py-1 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded text-[9px] font-semibold uppercase tracking-wider transition flex items-center justify-center gap-1"
+                    className="w-full py-1 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded text-[9px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1"
                   >
-                    <QrCode className="w-3 h-3" />
+                    <QrCode className="w-3 h-3 text-cyan-400" />
                     <span>Ampliar</span>
                   </button>
                 </div>
@@ -390,7 +390,7 @@ export default function PortalDashboardPage() {
               {/* Sede Footer */}
               <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
                 <div className="flex items-center gap-1 text-[11px]">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                  <MapPin className="w-3.5 h-3.5 text-cyan-400" />
                   <span>{data.sucursales?.[0]?.nombre || "Sede Principal"}</span>
                 </div>
                 <span className="text-[10px] font-mono text-slate-500">ID #{data.id}</span>
@@ -406,21 +406,21 @@ export default function PortalDashboardPage() {
                   <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Mi Cuenta Corriente</span>
                   <button
                     onClick={() => setActiveTab("cuenta")}
-                    className="text-[11px] font-medium text-indigo-400 hover:underline"
+                    className="text-[11px] font-bold text-cyan-400 hover:underline"
                   >
                     Detalle →
                   </button>
                 </div>
 
-                <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
                   <div>
-                    <span className="text-[9px] text-slate-500 uppercase font-semibold block">Saldo a Pagar</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold block">Saldo a Pagar</span>
                     <p className={`text-base font-bold font-mono mt-0.5 tabular-nums ${saldoCuenta > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                       {formatMoney(saldoCuenta)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] text-slate-500 uppercase font-semibold block">Cupo Disponible</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold block">Cupo Disponible</span>
                     <p className="text-xs font-bold font-mono text-slate-300 tabular-nums mt-0.5">{formatMoney(creditoDisponible)}</p>
                   </div>
                 </div>
@@ -431,18 +431,18 @@ export default function PortalDashboardPage() {
                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Aforo de Sede</span>
-                    <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                    <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">
                       {data.aforo.porcentaje}% Ocupado
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-400">{data.aforo.nivelTexto}</p>
+                  <p className="text-xs text-slate-400 font-medium">{data.aforo.nivelTexto}</p>
                   
                   <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-slate-800">
                     <div
                       style={{ width: `${Math.min(100, data.aforo.porcentaje)}%` }}
                       className={`h-full rounded-full transition-all ${
-                        data.aforo.porcentaje >= 80 ? "bg-rose-500" : data.aforo.porcentaje >= 50 ? "bg-amber-500" : "bg-emerald-500"
+                        data.aforo.porcentaje >= 80 ? "bg-rose-500" : data.aforo.porcentaje >= 50 ? "bg-amber-500" : "bg-gradient-to-r from-cyan-500 to-blue-600"
                       }`}
                     />
                   </div>
@@ -457,21 +457,21 @@ export default function PortalDashboardPage() {
           <div className="space-y-3">
             
             <div className="grid grid-cols-3 gap-2">
-              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
-                <span className="text-[9px] text-slate-400 uppercase font-semibold block">Deuda</span>
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span className="text-[9px] text-slate-400 uppercase font-bold block">Deuda</span>
                 <p className={`text-sm font-bold font-mono mt-0.5 tabular-nums ${saldoCuenta > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                   {formatMoney(saldoCuenta)}
                 </p>
               </div>
 
-              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
-                <span className="text-[9px] text-slate-400 uppercase font-semibold block">Límite</span>
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span className="text-[9px] text-slate-400 uppercase font-bold block">Límite</span>
                 <p className="text-sm font-bold font-mono text-slate-300 mt-0.5 tabular-nums">{formatMoney(limiteCredito)}</p>
               </div>
 
-              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
-                <span className="text-[9px] text-slate-400 uppercase font-semibold block">Disponible</span>
-                <p className="text-sm font-bold font-mono text-indigo-400 mt-0.5 tabular-nums">{formatMoney(creditoDisponible)}</p>
+              <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span className="text-[9px] text-slate-400 uppercase font-bold block">Disponible</span>
+                <p className="text-sm font-bold font-mono text-cyan-400 mt-0.5 tabular-nums">{formatMoney(creditoDisponible)}</p>
               </div>
             </div>
 
@@ -479,7 +479,7 @@ export default function PortalDashboardPage() {
             <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
                 <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <Receipt className="w-3.5 h-3.5 text-indigo-400" />
+                  <Receipt className="w-3.5 h-3.5 text-cyan-400" />
                   Movimientos Registrados
                 </h3>
               </div>
@@ -499,7 +499,7 @@ export default function PortalDashboardPage() {
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                                 esCargo
                                   ? "bg-rose-950/60 text-rose-400 border-rose-800/50"
                                   : "bg-emerald-950/60 text-emerald-400 border-emerald-800/50"
@@ -539,7 +539,7 @@ export default function PortalDashboardPage() {
           <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
               <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
                 Historial de Cuotas Abonadas
               </h3>
             </div>
@@ -553,9 +553,9 @@ export default function PortalDashboardPage() {
                 {data.pagos.map((p: any) => (
                   <div key={p.id} className="p-3 hover:bg-slate-800/40 transition flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-white">{p.membresia?.nombre || "General"}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        Pagado: {formatDate(p.fechaPago)} · Vence: <strong className="text-slate-200">{formatDate(p.fechaVencimiento)}</strong>
+                      <p className="font-bold text-white">{p.membresia?.nombre || "General"}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        Pagado: {formatDate(p.fechaPago)} · Vence: <strong className="text-cyan-400">{formatDate(p.fechaVencimiento)}</strong>
                       </p>
                     </div>
                     <span className="font-bold font-mono text-emerald-400 tabular-nums">
@@ -573,7 +573,7 @@ export default function PortalDashboardPage() {
           <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800">
               <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-indigo-400" />
+                <History className="w-3.5 h-3.5 text-cyan-400" />
                 Registro de Entrenamientos
               </h3>
             </div>
@@ -587,7 +587,7 @@ export default function PortalDashboardPage() {
                 {data.ingresos.map((ing: any) => (
                   <div key={ing.id} className="p-3 hover:bg-slate-800/40 transition flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-white">{formatDate(ing.fechaHora)}</p>
+                      <p className="font-bold text-white">{formatDate(ing.fechaHora)}</p>
                       <p className="text-[10px] text-slate-400 font-mono">
                         {new Date(ing.fechaHora).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                         {ing.horaSalida && ` a ${new Date(ing.horaSalida).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`}
@@ -599,7 +599,7 @@ export default function PortalDashboardPage() {
                         {ing.duracionMinutos} min
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-500 italic">En sala</span>
+                      <span className="text-[10px] text-cyan-400 font-semibold italic">En sala</span>
                     )}
                   </div>
                 ))}
@@ -613,26 +613,26 @@ export default function PortalDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
               <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
                 Ocupación Actual
               </h3>
-              <div className="p-5 bg-slate-950 rounded-lg border border-slate-800 text-center space-y-1">
-                <h2 className="text-3xl font-bold text-white font-mono">{data.aforo?.personasAdentro || 0}</h2>
+              <div className="p-5 bg-slate-950 rounded-xl border border-slate-800 text-center space-y-1">
+                <h2 className="text-3xl font-black text-white font-mono">{data.aforo?.personasAdentro || 0}</h2>
                 <p className="text-xs text-slate-400">Socios en sala ahora</p>
-                <p className="text-xs font-medium text-emerald-400">{data.aforo?.nivelTexto || "Ideal para entrenar"}</p>
+                <p className="text-xs font-bold text-cyan-400">{data.aforo?.nivelTexto || "Ideal para entrenar"}</p>
               </div>
             </div>
 
             <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
               <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
                 Horarios Sugeridos
               </h3>
               <div className="space-y-1.5 text-xs">
                 {data.horasRecomendadas?.map((h: any, idx: number) => (
                   <div key={idx} className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-white">{h.turno}</p>
+                      <p className="font-bold text-white">{h.turno}</p>
                       <p className="text-[10px] text-slate-400 font-mono">{h.rango}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-medium border border-slate-700">
@@ -649,7 +649,7 @@ export default function PortalDashboardPage() {
       {/* Modal Desglose Ticket */}
       {ticketModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-2xs flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-xl max-w-xs w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
+          <div className="bg-white text-slate-900 rounded-2xl max-w-xs w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-100">
             <div className="bg-slate-900 p-4 text-white text-center relative">
               <button
                 onClick={() => setTicketModal(null)}
@@ -657,7 +657,7 @@ export default function PortalDashboardPage() {
               >
                 <X className="h-4 w-4" />
               </button>
-              <Receipt className="w-5 h-5 mx-auto mb-1 text-slate-300" />
+              <Receipt className="w-5 h-5 mx-auto mb-1 text-cyan-400" />
               <h3 className="text-xs font-bold uppercase tracking-wider">Detalle de Compra</h3>
               <p className="text-[10px] text-slate-400 font-mono">Ticket #{ticketModal.id}</p>
             </div>
@@ -698,7 +698,7 @@ export default function PortalDashboardPage() {
       {/* Modal QR Pantalla Completa */}
       {showQrModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-xl p-5 max-w-xs w-full text-center space-y-3 shadow-2xl relative">
+          <div className="bg-white text-slate-900 rounded-2xl p-5 max-w-xs w-full text-center space-y-3 shadow-2xl relative">
             <button
               onClick={() => setShowQrModal(false)}
               className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-slate-900 rounded-full hover:bg-slate-100 transition"
@@ -711,13 +711,13 @@ export default function PortalDashboardPage() {
               <p className="text-[11px] text-slate-500">Muestra este código al escáner del molinete</p>
             </div>
 
-            <div className="flex justify-center p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="flex justify-center p-2.5 bg-slate-50 rounded-xl border border-slate-200">
               <QRCodeDisplay value={data.documento} size={180} />
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-slate-800">{data.nombre} {data.apellido}</p>
-              <p className="text-xs text-slate-500 font-mono">DNI: {data.documento}</p>
+              <p className="text-xs font-bold text-slate-900">{data.nombre} {data.apellido}</p>
+              <p className="text-xs text-cyan-800 font-mono font-bold">DNI: {data.documento}</p>
             </div>
 
             <button
@@ -732,8 +732,8 @@ export default function PortalDashboardPage() {
 
       {/* Modal Cambio Contraseña */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-2xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-xl p-5 max-w-sm w-full border border-slate-800 shadow-2xl space-y-3 text-white">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-2xl p-5 max-w-sm w-full border border-slate-800 shadow-2xl space-y-3 text-white">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <h3 className="text-xs font-bold uppercase tracking-wider">
                 {data.debeCambiarPassword ? "Actualiza tu Contraseña" : "Cambiar Contraseña"}
@@ -753,26 +753,26 @@ export default function PortalDashboardPage() {
 
             <form onSubmit={handleCambiarPassword} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Nueva Contraseña</label>
+                <label className="block text-slate-300 font-bold mb-1">Nueva Contraseña</label>
                 <input
                   type="password"
                   required
                   value={nuevaPassword}
                   onChange={(e) => setNuevaPassword(e.target.value)}
                   placeholder="Mínimo 6 caracteres"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Confirmar Contraseña</label>
+                <label className="block text-slate-300 font-bold mb-1">Confirmar Contraseña</label>
                 <input
                   type="password"
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Repite la contraseña"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
@@ -789,7 +789,7 @@ export default function PortalDashboardPage() {
                 <button
                   type="submit"
                   disabled={changingPassword}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition disabled:opacity-50"
                 >
                   {changingPassword ? "Guardando..." : "Guardar"}
                 </button>

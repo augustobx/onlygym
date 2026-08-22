@@ -125,11 +125,11 @@ export default function AforoTiempoRealPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Activity className="h-5 w-5 text-indigo-600" />
+            <Activity className="h-5 w-5 text-cyan-600" />
             Aforo & Ocupación en Tiempo Real
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Sede: <strong className="text-slate-800">{sucursalNombre}</strong> — Monitoreo en vivo de permanencia en sala.
+          <p className="text-xs text-slate-600 font-medium mt-0.5">
+            Sede: <strong className="text-slate-900">{sucursalNombre}</strong> — Monitoreo en vivo de permanencia en sala.
           </p>
         </div>
 
@@ -137,16 +137,16 @@ export default function AforoTiempoRealPage() {
           <button
             onClick={() => loadAforo(sucursalId, true)}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-50 shadow-2xs transition"
           >
-            <RefreshCw className={`h-3.5 w-3.5 text-slate-500 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 text-cyan-600 ${loading ? "animate-spin" : ""}`} />
             <span>Actualizar</span>
           </button>
 
           {aforo.personasAdentro > 0 && (
             <button
               onClick={handleSalidaTodos}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-medium transition"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold transition"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span>Salida Masiva</span>
@@ -156,12 +156,12 @@ export default function AforoTiempoRealPage() {
       </div>
 
       {msg && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 border ${
+        <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border ${
           msg.type === "success" 
-            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
-            : "bg-rose-50 text-rose-800 border-rose-200"
+            ? "bg-emerald-50 text-emerald-900 border-emerald-300" 
+            : "bg-rose-50 text-rose-900 border-rose-300"
         }`}>
-          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-rose-600" />}
+          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-rose-700" />}
           <span>{msg.text}</span>
         </div>
       )}
@@ -170,18 +170,18 @@ export default function AforoTiempoRealPage() {
       <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-800">
+              <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse"></span>
               <span>Monitoreo Activo · {aforo.nivelTexto}</span>
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl font-bold font-mono text-slate-900 tabular-nums">{aforo.personasAdentro}</span>
-              <span className="text-sm font-medium text-slate-500">/ {aforo.capacidadMaxima} capacidad máx.</span>
+              <span className="text-sm font-semibold text-slate-600">/ {aforo.capacidadMaxima} capacidad máx.</span>
             </div>
           </div>
 
           <div className="text-left sm:text-right space-y-0.5">
-            <span className="text-xs text-slate-500 font-medium">Permanencia Promedio</span>
+            <span className="text-xs text-slate-500 font-bold uppercase">Permanencia Promedio</span>
             <p className="text-lg font-bold font-mono text-slate-900 tabular-nums">{aforo.duracionPromedio} min</p>
           </div>
         </div>
@@ -191,11 +191,11 @@ export default function AforoTiempoRealPage() {
             <div
               style={{ width: `${Math.min(100, aforo.porcentaje)}%` }}
               className={`h-full rounded-full transition-all ${
-                aforo.porcentaje >= 85 ? "bg-rose-500" : aforo.porcentaje >= 60 ? "bg-amber-500" : "bg-indigo-600"
+                aforo.porcentaje >= 85 ? "bg-rose-500" : aforo.porcentaje >= 60 ? "bg-amber-500" : "bg-gradient-to-r from-cyan-500 to-blue-600"
               }`}
             />
           </div>
-          <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+          <div className="flex justify-between text-[11px] text-slate-600 font-mono font-semibold">
             <span>0 personas</span>
             <span>{aforo.porcentaje}% de ocupación</span>
             <span>{aforo.capacidadMaxima} personas máx.</span>
@@ -210,7 +210,7 @@ export default function AforoTiempoRealPage() {
         <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Users className="h-4 w-4 text-indigo-600" />
+              <Users className="h-4 w-4 text-cyan-600" />
               <span>Socios en Sala ({aforo.personasPresentes.length})</span>
             </h3>
 
@@ -221,14 +221,14 @@ export default function AforoTiempoRealPage() {
                 value={searchPresentes}
                 onChange={e => setSearchPresentes(e.target.value)}
                 placeholder="Buscar socio presente..."
-                className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 text-slate-900 rounded-lg text-xs font-medium focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full pl-8 pr-3 py-1 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
               />
             </div>
           </div>
 
           <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/70 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100 sticky top-0">
+              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200 sticky top-0">
                 <tr>
                   <th className="px-4 py-2.5">Socio</th>
                   <th className="px-4 py-2.5">Hora Entrada</th>
@@ -239,28 +239,28 @@ export default function AforoTiempoRealPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {personasFiltradas.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500 font-medium">
                       No hay socios presentes en este momento.
                     </td>
                   </tr>
                 ) : (
                   personasFiltradas.map((p: any) => (
                     <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-2.5 font-semibold text-slate-900">
+                      <td className="px-4 py-2.5 font-bold text-slate-900">
                         {p.nombre}
-                        <span className="text-[10px] text-slate-500 font-mono block font-normal">DNI: {p.documento}</span>
+                        <span className="text-[10px] text-slate-600 font-mono block font-semibold">DNI: {p.documento}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{p.horaEntrada}</td>
+                      <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{p.horaEntrada}</td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px]">
-                          <Clock className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-mono text-[10px] font-bold border border-slate-200">
+                          <Clock className="w-3 h-3 text-cyan-600" />
                           {p.minutosAdentro} min
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <button
                           onClick={() => handleSalidaIndividual(p.id, p.nombre)}
-                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 rounded-md text-xs font-medium transition"
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 rounded-md text-xs font-semibold transition"
                         >
                           Marcar Salida
                         </button>
@@ -277,29 +277,29 @@ export default function AforoTiempoRealPage() {
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
           <div>
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <LogOut className="h-4 w-4 text-slate-600" />
+              <LogOut className="h-4 w-4 text-cyan-600" />
               Salida Manual por DNI
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">Si el socio no marcó salida en el molinete.</p>
+            <p className="text-xs text-slate-600 mt-0.5 font-medium">Si el socio no marcó salida en el molinete.</p>
           </div>
 
           <form onSubmit={handleSalidaDni} className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">DNI del Socio</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">DNI del Socio</label>
               <input
                 type="text"
                 required
                 value={dniSalida}
                 onChange={e => setDniSalida(e.target.value)}
                 placeholder="Número de documento..."
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-mono font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
               />
             </div>
 
             <button
               type="submit"
               disabled={loadingSalida || !dniSalida}
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-2xs disabled:opacity-50 transition"
+              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 transition"
             >
               {loadingSalida ? "Procesando..." : "Registrar Salida"}
             </button>
