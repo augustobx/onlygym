@@ -1,0 +1,42 @@
+{
+  "name": "GymLink - Gestión Integral & Portal del Socio",
+  "short_name": "GymLink",
+  "description": "Sistema de gestión integral para gimnasios y carnet digital de socios",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4338ca",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["fitness", "business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Carnet Digital",
+      "url": "/portal/dashboard",
+      "description": "Acceso al QR del socio"
+    },
+    {
+      "name": "Panel Admin",
+      "url": "/dashboard",
+      "description": "Panel de administración"
+    },
+    {
+      "name": "Punto de Venta",
+      "url": "/dashboard/caja",
+      "description": "Punto de venta y cantina"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  web:
+    image: node:24-alpine
+    container_name: gymlink_web_v2
+    working_dir: /app
+    volumes:
+      - ./:/app
+    ports:
+      - "3001:3000"
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gymlink_v2?schema=public
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16 # Usando la 16 ya que la 18 aún no está en release oficial estable y ampliamente soportada en Alpine
+    container_name: gymlink_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gymlink_v2
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  nginx-proxy:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: gymlink_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    volumes:
+      - ./data/nginx:/data
+      - ./data/letsencrypt:/etc/letsencrypt
+
+volumes:
+  pgdata:

@@ -1,0 +1,303 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Sucursal {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @db.VarChar(100)
+  direccion   String?  @db.VarChar(255)
+  estado      String   @default("activo")
+  
+  clientes       Cliente[]
+  ingresos       Ingreso[]
+  pagos          Pago[]
+  ventas         Venta[]
+  usuarios       User[]
+  membresias     Membresia[]
+  productos      Producto[]
+  horarios       ConfiguracionHorario[]
+
+  @@map("sucursales")
+}
+
+// --- BETTER AUTH CORE TABLES ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  username      String?   @unique
+  displayUsername String?
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  sessions      Session[]
+  accounts      Account[]
+
+  // GymLink Custom Fields
+  nivel         String    @default("cajero") // admin, supervisor, cajero
+  estado        String    @default("activo")
+  
+  // Relations
+  sucursales    Sucursal[]
+  ventas        Venta[]
+  movimientosCuenta CuentaMovimiento[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  issuer                String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("verification")
+}
+
+// --- GYMLINK TABLES ---
+
+model Cliente {
+  id              Int               @id @default(autoincrement())
+  documento       String            @unique @db.VarChar(20)
+  nombre          String            @db.VarChar(100)
+  apellido        String            @db.VarChar(100)
+  telefono        String?           @db.VarChar(20)
+  email           String?           @db.VarChar(100)
+  direccion       String?           @db.VarChar(255)
+  foto            String?           @db.Text
+  fechaRegistro   DateTime          @default(now()) @map("fecha_registro")
+  estado          String            @default("activo")
+  
+  sucursales      Sucursal[]
+  pagos           Pago[]
+  ingresos        Ingreso[]
+  ventas          Venta[]
+  usuarioCliente  UsuarioCliente?
+  cuentaCorriente CuentaCorriente?
+
+  @@index([documento])
+  @@index([nombre, apellido])
+  @@map("clientes")
+}
+
+model Membresia {
+  id              Int      @id @default(autoincrement())
+  nombre          String   @db.VarChar(50)
+  diasDuracion    Int      @map("dias_duracion")
+  precio          Decimal  @db.Decimal(10, 2)
+  descripcion     String?  @db.Text
+  estado          String   @default("activo")
+
+  pagos           Pago[]
+  sucursales      Sucursal[]
+
+  @@map("membresias")
+}
+
+model Pago {
+  id              Int       @id @default(autoincrement())
+  clienteId       Int       @map("cliente_id")
+  membresiaId     Int       @map("membresia_id")
+  sucursalId      Int?      @map("sucursal_id")
+  fechaPago       DateTime  @default(now()) @map("fecha_pago")
+  fechaVencimiento DateTime  @map("fecha_vencimiento") @db.Date
+  monto           Decimal   @db.Decimal(10, 2)
+  metodoPago      String?   @default("efectivo") @map("metodo_pago")
+  estado          String    @default("pagado")
+  notas           String?   @db.Text
+
+  cliente         Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  membresia       Membresia @relation(fields: [membresiaId], references: [id])
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([clienteId])
+  @@index([fechaVencimiento])
+  @@index([sucursalId])
+  @@map("pagos")
+}
+
+model Producto {
+  id              Int       @id @default(autoincrement())
+  codigo          String?   @unique @db.VarChar(50)
+  nombre          String    @db.VarChar(150)
+  descripcion     String?   @db.Text
+  precio          Decimal   @db.Decimal(10, 2)
+  stock           Int       @default(0)
+  stockMinimo     Int       @default(5) @map("stock_minimo")
+  categoria       String?   @db.VarChar(50)
+  imagen          String?   @db.VarChar(255)
+  estado          String    @default("activo")
+  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+
+  ventaItems      VentaItem[]
+  sucursales      Sucursal[]
+
+  @@index([codigo])
+  @@index([nombre])
+  @@map("productos")
+}
+
+model Venta {
+  id              Int       @id @default(autoincrement())
+  sucursalId      Int?      @map("sucursal_id")
+  clienteId       Int?      @map("cliente_id")
+  tipoPago        String    @default("efectivo") @map("tipo_pago") // 'efectivo', 'cuenta_corriente', 'tarjeta', 'transferencia'
+  estadoPago      String    @default("pagado") @map("estado_pago") // 'pagado', 'pendiente'
+  metodoPago      String?   @map("metodo_pago")
+  fechaVenta      DateTime  @default(now()) @map("fecha_venta")
+  total           Decimal   @db.Decimal(10, 2)
+  userId          String?   @map("user_id")
+  notas           String?   @db.Text
+
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
+  user            User?     @relation(fields: [userId], references: [id])
+  items           VentaItem[]
+
+  @@index([fechaVenta])
+  @@index([sucursalId])
+  @@index([clienteId])
+  @@map("ventas")
+}
+
+model VentaItem {
+  id              Int       @id @default(autoincrement())
+  ventaId         Int       @map("venta_id")
+  productoId      Int       @map("producto_id")
+  cantidad        Int
+  precioUnitario  Decimal   @map("precio_unitario") @db.Decimal(10, 2)
+  subtotal        Decimal   @db.Decimal(10, 2)
+
+  venta           Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto        Producto  @relation(fields: [productoId], references: [id])
+
+  @@index([ventaId])
+  @@map("venta_items")
+}
+
+model Ingreso {
+  id              Int       @id @default(autoincrement())
+  clienteId       Int       @map("cliente_id")
+  sucursalId      Int?      @map("sucursal_id")
+  documento       String    @db.VarChar(20)
+  fechaHora       DateTime  @default(now()) @map("fecha_hora")
+  horaSalida      DateTime? @map("hora_salida")
+  duracionMinutos Int?      @map("duracion_minutos")
+  diasVencido     Int?      @map("dias_vencido")
+  estado          String    
+  motivo          String?   @db.VarChar(255)
+
+  cliente         Cliente   @relation(fields: [clienteId], references: [id])
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([fechaHora])
+  @@index([horaSalida])
+  @@index([clienteId])
+  @@index([sucursalId])
+  @@map("ingresos")
+}
+
+model UsuarioCliente {
+  id                  Int       @id @default(autoincrement())
+  clienteId           Int       @unique @map("cliente_id")
+  usuario             String    @unique @db.VarChar(20) 
+  password            String    @db.VarChar(255)
+  debeCambiarPassword Boolean   @default(true) @map("debe_cambiar_password")
+  ultimoAcceso        DateTime? @map("ultimo_acceso")
+
+  cliente             Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("usuarios_clientes")
+}
+
+model CuentaCorriente {
+  id             Int       @id @default(autoincrement())
+  clienteId      Int       @unique @map("cliente_id")
+  saldo          Decimal   @default(0) @db.Decimal(10, 2)
+  limiteCredito  Decimal   @default(0) @map("limite_credito") @db.Decimal(10, 2)
+
+  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  movimientos    CuentaMovimiento[]
+
+  @@map("cuenta_corriente")
+}
+
+model CuentaMovimiento {
+  id             Int       @id @default(autoincrement())
+  cuentaId       Int       @map("cuenta_id")
+  tipo           String    // 'cargo', 'pago'
+  monto          Decimal   @db.Decimal(10, 2)
+  concepto       String?   @db.VarChar(255)
+  fecha          DateTime  @default(now())
+  usuarioAdminId String?   @map("usuario_admin_id")
+
+  cuenta         CuentaCorriente @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  usuarioAdmin   User?           @relation(fields: [usuarioAdminId], references: [id])
+
+  @@index([cuentaId])
+  @@index([fecha])
+  @@map("cuenta_movimientos")
+}
+
+model ConfiguracionHorario {
+  id              Int       @id @default(autoincrement())
+  sucursalId      Int?      @map("sucursal_id")
+  diaSemana       Int       @map("dia_semana") // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+  tipoApertura    String    @default("completo") @map("tipo_apertura") // 'cerrado', 'completo', 'mañana', 'tarde', 'doble'
+  horaApertura1   String?   @map("hora_apertura_1") @db.VarChar(10) // "06:00"
+  horaCierre1     String?   @map("hora_cierre_1") @db.VarChar(10) // "22:00"
+  horaApertura2   String?   @map("hora_apertura_2") @db.VarChar(10)
+  horaCierre2     String?   @map("hora_cierre_2") @db.VarChar(10)
+  capacidadMaxima Int?      @default(50) @map("capacidad_maxima")
+  activo          Boolean   @default(true)
+
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@unique([sucursalId, diaSemana])
+  @@index([sucursalId])
+  @@map("configuracion_horarios")
+}
+
