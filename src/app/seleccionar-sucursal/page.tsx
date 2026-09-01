@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getMisSucursales } from "@/app/actions/auth-actions";
+import { getMisSucursales, seleccionarSucursalActiva } from "@/app/actions/auth-actions";
 import { useRouter } from "next/navigation";
 import { MapPin, LogOut, ChevronRight, Building2 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -30,7 +30,9 @@ export default function SeleccionarSucursalPage() {
     load();
   }, []);
 
-  const seleccionar = (id: number, nombre: string) => {
+  const seleccionar = async (id: number, nombre: string) => {
+    const result = await seleccionarSucursalActiva(id);
+    if (!result.success) return;
     localStorage.setItem("activeSucursalId", id.toString());
     localStorage.setItem("activeSucursalName", nombre);
     router.push("/dashboard");

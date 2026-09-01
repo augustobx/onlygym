@@ -19,7 +19,9 @@ COPY . ./
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-RUN npm run build
+# Valores no operativos usados sólo para evaluar la configuración durante el build.
+# El runner no los hereda y exige los secretos reales al iniciar.
+RUN BETTER_AUTH_SECRET="onlygym-build-stage-placeholder-never-use-at-runtime" BETTER_AUTH_URL="http://localhost:3000" npm run build
 
 # 3. Runner Producción
 FROM base AS runner
@@ -30,11 +32,13 @@ ENV HOSTNAME="0.0.0.0"
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+RUN mkdir -p /app/data/progress-photos && chown -R nextjs:nodejs /app/data
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 

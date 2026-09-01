@@ -3,12 +3,17 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
 
 export async function searchClientes(query: string, sucursalId: number) {
   try {
+    const context = await requireStaffContext({ branchId: sucursalId });
+    await requireTenantModule(context.tenantId, "caja");
     const clientes = await prisma.cliente.findMany({
       where: {
+        tenantId: context.tenantId,
         estado: "activo",
+        sucursales: { some: { id: context.branchId! } },
         OR: [
           { documento: { contains: query, mode: "insensitive" } },
           { nombre: { contains: query, mode: "insensitive" } },
@@ -40,8 +45,10 @@ export async function searchClientes(query: string, sucursalId: number) {
 
 export async function getMembresiasDisponibles() {
   try {
+    const context = await requireStaffContext();
+    await requireTenantModule(context.tenantId, "membresias");
     const membresias = await prisma.membresia.findMany({
-      where: { estado: "activo" },
+      where: { tenantId: context.tenantId, estado: "activo" },
       orderBy: { diasDuracion: "asc" },
     });
     return {
@@ -66,11 +73,15 @@ export async function registrarPago(data: {
   notas?: string;
 }) {
   try {
-    const membresia = await prisma.membresia.findUnique({
-      where: { id: data.membresiaId },
-    });
+    const context = await requireStaffContext({ branchId: data.sucursalId });
+    await requireTenantModule(context.tenantId, "caja");
+    const [membresia, cliente] = await Promise.all([prisma.membresia.findFirst({
+      where: { id: data.membresiaId, tenantId: context.tenantId },
+    }), prisma.cliente.findFirst({
+      where: { id: data.clienteId, tenantId: context.tenantId }, select: { id: true },
+    })]);
 
-    if (!membresia) {
+    if (!membresia || !cliente) {
       return { success: false, error: "Membresía no válida" };
     }
 
@@ -79,7 +90,7 @@ export async function registrarPago(data: {
 
     // Buscar último pago para ver si tiene días a favor
     const ultimoPago = await prisma.pago.findFirst({
-      where: { clienteId: data.clienteId },
+      where: { tenantId: context.tenantId, clienteId: data.clienteId },
       orderBy: { fechaVencimiento: "desc" },
     });
 
@@ -95,6 +106,7 @@ export async function registrarPago(data: {
 
     const pago = await prisma.pago.create({
       data: {
+        tenantId: context.tenantId,
         clienteId: data.clienteId,
         membresiaId: data.membresiaId,
         sucursalId: data.sucursalId,
@@ -122,12 +134,15 @@ export async function registrarPago(data: {
 
 export async function getMovimientosHoy(sucursalId: number) {
   try {
+    const context = await requireStaffContext({ branchId: sucursalId });
+    await requireTenantModule(context.tenantId, "caja");
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const pagos = await prisma.pago.findMany({
       where: {
-        sucursalId: sucursalId,
+        tenantId: context.tenantId,
+        sucursalId: context.branchId,
         fechaPago: {
           gte: hoy,
         },

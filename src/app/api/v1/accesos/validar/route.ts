@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-auth";
-import { verificarHorarioAtencion } from "@/app/actions/horarios";
+import { checkBranchSchedule } from "@/lib/access-schedule";
+import { getTenantModules } from "@/lib/tenant-context";
 
 /**
  * POST /api/v1/accesos/validar
@@ -39,9 +40,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Buscar socio por documento
-    const cliente = await prisma.cliente.findUnique({
-      where: { documento },
+    const sucursal = await prisma.sucursal.findFirst({ where: { id: sucursalId, estado: "activo", tenant: { estado: "activo" } } });
+    if (!sucursal) {
+      return NextResponse.json({ autorizado: false, abrirRele: false, motivo: "Sucursal no disponible" }, { status: 404 });
+    }
+
+    // 1. Buscar socio dentro del tenant y de la sucursal del dispositivo
+    const cliente = await prisma.cliente.findFirst({
+      where: { tenantId: sucursal.tenantId, documento, sucursales: { some: { id: sucursalId } } },
       include: {
         pagos: {
           orderBy: { fechaVencimiento: "desc" },
@@ -70,10 +76,11 @@ export async function POST(req: Request) {
     }
 
     // 2. Verificar horario de atención
-    const horario = await verificarHorarioAtencion(sucursalId);
+    const horario = await checkBranchSchedule(sucursalId);
     if (!horario.permitido) {
       await prisma.ingreso.create({
         data: {
+          tenantId: sucursal.tenantId,
           clienteId: cliente.id,
           sucursalId,
           documento: cliente.documento,
@@ -119,15 +126,25 @@ export async function POST(req: Request) {
     }
 
     // 4. Registrar en base de datos
-    const ingreso = await prisma.ingreso.create({
-      data: {
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const alreadyAwarded = autorizado ? await prisma.ingreso.findFirst({ where: { tenantId: sucursal.tenantId, clienteId: cliente.id, estado: "ACTIVO", fechaHora: { gte: startOfDay } }, select: { id: true } }) : null;
+    const modules = await getTenantModules(sucursal.tenantId);
+    const ingreso = await prisma.$transaction(async (tx) => {
+      const created = await tx.ingreso.create({ data: {
+        tenantId: sucursal.tenantId,
         clienteId: cliente.id,
         sucursalId,
         documento: cliente.documento,
         estado: estadoAcceso,
         motivo: estadoAcceso === "ACTIVO" ? "Ingreso regular" : motivo,
         diasVencido,
-      },
+      } });
+      if (autorizado) {
+        const classBooking = await tx.reservaClase.findFirst({ where: { tenantId: sucursal.tenantId, clienteId: cliente.id, estado: "confirmada", clase: { inicio: { gte: new Date(Date.now() - 30 * 60000), lte: new Date(Date.now() + 90 * 60000) }, sucursalId } }, orderBy: { clase: { inicio: "asc" } } });
+        if (classBooking) await tx.reservaClase.update({ where: { id: classBooking.id }, data: { estado: "asistio", asistenciaEn: new Date() } });
+      }
+      if (autorizado && !alreadyAwarded && modules.puntos) await tx.movimientoPuntos.create({ data: { tenantId: sucursal.tenantId, clienteId: cliente.id, puntos: 10, tipo: "asistencia", concepto: "Visita al gimnasio", referencia: `ingreso:${created.id}` } });
+      return created;
     });
 
     return NextResponse.json({

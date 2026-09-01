@@ -137,12 +137,11 @@ export default function ClienteDetailPage() {
   };
 
   const handleResetPassword = async () => {
-    if (!confirm("¿Restablecer la contraseña del socio a '123456'?")) return;
+    if (!confirm("¿Generar una contraseña temporal y cerrar todas las sesiones del socio?")) return;
     setResettingPwd(true);
     const res = await resetPasswordCliente(clienteId);
     if (res.success) {
-      setMsg({ type: "success", text: "Contraseña restablecida a '123456'." });
-      setTimeout(() => setMsg(null), 3000);
+      setMsg({ type: "success", text: `Contraseña temporal: ${res.temporaryPassword}. Copiala ahora; no volverá a mostrarse.` });
     } else {
       setMsg({ type: "error", text: res.error || "Error al restablecer" });
     }
@@ -243,7 +242,7 @@ export default function ClienteDetailPage() {
   const creditoDisponible = Math.max(0, limiteCredito - saldoDeudor);
 
   const cleanPhone = (cliente.telefono || "").replace(/[^0-9]/g, "");
-  const sucursalNombre = cliente.sucursales?.[0]?.nombre || "GymLink";
+  const sucursalNombre = cliente.sucursales?.[0]?.nombre || "OnlyGym";
   const whatsappUrl = cleanPhone
     ? `https://wa.me/${cleanPhone}?text=Hola%20${encodeURIComponent(
         cliente.nombre

@@ -286,6 +286,82 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Widgets Fase 8: Clases del Día & Alertas de Retención */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Clases del Día */}
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden p-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-cyan-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Clases & Reservas de Hoy</h3>
+            </div>
+            <Link href="/dashboard/clases" className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
+              Ver agenda completa →
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {(!s.clasesHoy || s.clasesHoy.length === 0) ? (
+              <p className="text-xs text-slate-500 text-center py-6">No hay clases programadas para hoy.</p>
+            ) : (
+              s.clasesHoy.map((clase: any) => {
+                const pct = Math.min(100, Math.round((clase.reservados / clase.cupoMaximo) * 100));
+                return (
+                  <div key={clase.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900">{clase.nombre}</span>
+                        <span className="text-[10px] text-cyan-700 font-mono font-bold">{formatTime(clase.inicio)} hs</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Profesor: {clase.profesor} · {clase.duracionMinutos} min</p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-bold text-slate-700">{clase.reservados}/{clase.cupoMaximo} cupos</span>
+                      <div className="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
+                        <div className="h-full bg-cyan-600 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Retención & Socios en Riesgo */}
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden p-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Retención & Alerta de Abandono</h3>
+            </div>
+            <Link href="/dashboard/reportes" className="text-xs text-cyan-700 hover:text-cyan-900 font-semibold">
+              Ver analítica →
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/70">
+              <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">Inactivos +7 días</span>
+              <p className="text-2xl font-black text-amber-900 mt-1">{s.sociosInactivos7d || 0}</p>
+              <p className="text-[10px] text-amber-700 mt-0.5">Riesgo moderado de baja</p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-red-50/60 border border-red-200/70">
+              <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider block">Inactivos +14 días</span>
+              <p className="text-2xl font-black text-red-900 mt-1">{s.sociosInactivos14d || 0}</p>
+              <p className="text-[10px] text-red-700 mt-0.5">Riesgo crítico de abandono</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Contactar a los socios antes de que cumplan 14 días sin asistir aumenta la tasa de retención un 40%.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
+

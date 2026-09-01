@@ -3,11 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { revalidatePath } from "next/cache";
+import { requireStaffContext } from "@/lib/tenant-context";
+import { RolTenant } from "@prisma/client";
 
 export async function getSucursales() {
   try {
+    const context = await requireStaffContext();
     const sucursales = await prisma.sucursal.findMany({
-      where: { estado: "activo" },
+      where: { tenantId: context.tenantId, estado: "activo" },
       orderBy: { id: "asc" },
     });
     return { success: true, data: serializeData(sucursales) };
@@ -19,7 +22,9 @@ export async function getSucursales() {
 
 export async function getAllSucursalesAdmin() {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
     const sucursales = await prisma.sucursal.findMany({
+      where: { tenantId: context.tenantId },
       include: {
         _count: {
           select: {
@@ -58,12 +63,14 @@ export async function createSucursal(data: {
   capacidadMaxima?: number;
 }) {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
     if (!data.nombre || data.nombre.trim() === "") {
       return { success: false, error: "El nombre de la sucursal es obligatorio" };
     }
 
     const nueva = await prisma.sucursal.create({
       data: {
+        tenantId: context.tenantId,
         nombre: data.nombre.trim(),
         direccion: data.direccion?.trim() || null,
         estado: "activo",
@@ -105,8 +112,11 @@ export async function updateSucursal(
   }
 ) {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const owned = await prisma.sucursal.findFirst({ where: { id, tenantId: context.tenantId }, select: { id: true } });
+    if (!owned) return { success: false, error: "Sucursal no encontrada" };
     const updated = await prisma.sucursal.update({
-      where: { id },
+      where: { id: owned.id },
       data: {
         nombre: data.nombre?.trim(),
         direccion: data.direccion?.trim() || null,
@@ -132,9 +142,12 @@ export async function updateSucursal(
 
 export async function toggleSucursalEstado(id: number, estadoActual: string) {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const owned = await prisma.sucursal.findFirst({ where: { id, tenantId: context.tenantId }, select: { id: true } });
+    if (!owned) return { success: false, error: "Sucursal no encontrada" };
     const nuevoEstado = estadoActual === "activo" ? "inactivo" : "activo";
     const updated = await prisma.sucursal.update({
-      where: { id },
+      where: { id: owned.id },
       data: { estado: nuevoEstado },
     });
 

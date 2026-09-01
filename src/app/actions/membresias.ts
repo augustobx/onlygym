@@ -4,11 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { membresiaSchema, MembresiaData } from "@/lib/schemas";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext } from "@/lib/tenant-context";
+import { RolTenant } from "@prisma/client";
 
 export async function getMembresias() {
   try {
+    const context = await requireStaffContext();
     const membresias = await prisma.membresia.findMany({
-      where: { estado: "activo" },
+      where: { tenantId: context.tenantId, estado: "activo" },
     });
     return {
       success: true,
@@ -33,8 +36,9 @@ export async function createMembresia(data: MembresiaData) {
   }
 
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
     const newMembresia = await prisma.membresia.create({
-      data: result.data,
+      data: { ...result.data, tenantId: context.tenantId },
     });
     
     revalidatePath("/dashboard/membresias");

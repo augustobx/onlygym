@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext } from "@/lib/tenant-context";
 
 export interface HorarioDiaInput {
   diaSemana: number; // 0=Dom, 1=Lun, ..., 6=Sab
@@ -30,6 +31,7 @@ const DIAS_DEFAULT: HorarioDiaInput[] = [
  * (Si no existe configuración previa, inicializa los días por defecto)
  */
 export async function getHorariosSemana(sucursalId: number = 1) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     let horarios = await prisma.configuracionHorario.findMany({
       where: { sucursalId },
@@ -84,6 +86,7 @@ export async function getHorariosSemana(sucursalId: number = 1) {
  * Guarda la configuración semanal de horarios de una sucursal
  */
 export async function guardarHorariosSemana(sucursalId: number, horarios: HorarioDiaInput[]) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     for (const h of horarios) {
       await prisma.configuracionHorario.upsert({
@@ -131,6 +134,7 @@ export async function guardarHorariosSemana(sucursalId: number, horarios: Horari
  * Valida si el gimnasio está abierto en este momento
  */
 export async function verificarHorarioAtencion(sucursalId: number = 1) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     const ahora = new Date();
     const diaSemana = ahora.getDay(); // 0 a 6
@@ -187,6 +191,7 @@ export async function verificarHorarioAtencion(sucursalId: number = 1) {
  * Obtiene el estado de aforo y ocupación en tiempo real para el monitor
  */
 export async function getAforoEnVivo(sucursalId: number = 1) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -313,6 +318,9 @@ export async function getAforoEnVivo(sucursalId: number = 1) {
  * Registra la salida individual de un socio por su ID de ingreso
  */
 export async function registrarSalidaSocio(ingresoId: number) {
+  const context = await requireStaffContext();
+  const owned = await prisma.ingreso.findFirst({ where: { id: ingresoId, tenantId: context.tenantId }, select: { id: true } });
+  if (!owned) return { success: false, error: "Ingreso no encontrado" };
   try {
     const ingreso = await prisma.ingreso.findUnique({
       where: { id: ingresoId },
@@ -348,6 +356,7 @@ export async function registrarSalidaSocio(ingresoId: number) {
  * Registra la salida de un socio buscando por su documento
  */
 export async function registrarSalidaPorDocumento(documento: string, sucursalId: number = 1) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -396,6 +405,7 @@ export async function registrarSalidaPorDocumento(documento: string, sucursalId:
  * Salida masiva de todas las personas activas (ej: cierre del gimnasio)
  */
 export async function marcarSalidaTodos(sucursalId: number = 1) {
+  await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);

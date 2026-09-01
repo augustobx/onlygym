@@ -1,23 +1,27 @@
 import { NextResponse } from "next/server";
 
-const DEFAULT_API_KEY = process.env.API_SECRET_KEY || "gymlink_secret_api_key_2026";
-
 /**
- * Valida la cabecera Authorization: Bearer <API_KEY> o ?apiKey=<API_KEY>
+ * Valida la cabecera Authorization: Bearer <API_KEY>.
+ * No se aceptan claves en query string para evitar filtrarlas en logs e historial.
  */
 export function validateApiKey(req: Request): { valid: boolean; errorResponse?: Response } {
-  const authHeader = req.headers.get("authorization");
-  let token = "";
-
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.substring(7).trim();
-  } else {
-    // Permitir también por query param en caso de dispositivos IoT con microcontroladores básicos
-    const url = new URL(req.url);
-    token = url.searchParams.get("apiKey") || "";
+  const expectedKey = process.env.API_SECRET_KEY;
+  if (!expectedKey) {
+    return {
+      valid: false,
+      errorResponse: NextResponse.json(
+        { error: "Integración de acceso no configurada", status: 503 },
+        { status: 503 }
+      ),
+    };
   }
 
-  if (!token || token !== DEFAULT_API_KEY) {
+  const authHeader = req.headers.get("authorization");
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.substring(7).trim()
+    : "";
+
+  if (!token || token !== expectedKey) {
     return {
       valid: false,
       errorResponse: NextResponse.json(

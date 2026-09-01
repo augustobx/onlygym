@@ -1,34 +1,91 @@
-version: '3.8'
+name: onlygym
 
 services:
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: gymlink_web_prod
-    restart: always
-    ports:
-      - "3005:3000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gymlink_v2?schema=public
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-gymlink_super_secure_production_secret_key_2026}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3005}
-    depends_on:
-      - db
-
   db:
     image: postgres:16-alpine
-    container_name: gymlink_postgres_prod
-    restart: always
+    container_name: onlygym-db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-gymlink_v2}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-onlygym}
     volumes:
-      - pgdata_prod:/var/lib/postgresql/data
+      - onlygym_pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build: .
+    container_name: onlygym-migrate
+    environment: &app_environment
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-onlygym}?schema=public
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
+      API_SECRET_KEY: ${API_SECRET_KEY:?API_SECRET_KEY is required}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-superadmin@nanolabs.ar}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
+      SUPERADMIN_JWT_SECRET: ${SUPERADMIN_JWT_SECRET:-}
+      DEFAULT_TENANT_SLUG: ${DEFAULT_TENANT_SLUG:-onlygym-demo}
+      TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-}
+      TENANT_HOST_MAP: ${TENANT_HOST_MAP:-}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required}
+      PROGRESS_PHOTO_DIR: /app/data/progress-photos
+    command: sh -c "npx prisma migrate deploy && node scripts/bootstrap-production.mjs"
+    networks:
+      - internal
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: .
+    container_name: onlygym-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-3005}:3000"
+    environment: *app_environment
+    volumes:
+      - onlygym_progress_photos:/app/data/progress-photos
+    networks:
+      - internal
+      - proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+networks:
+  internal:
+    driver: bridge
+  proxy:
+    external: true
 
 volumes:
-  pgdata_prod:
+  onlygym_pgdata:
+  onlygym_progress_photos:

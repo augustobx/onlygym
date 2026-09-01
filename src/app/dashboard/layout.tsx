@@ -7,13 +7,11 @@ import {
   Users, 
   CreditCard, 
   Settings, 
-  ShieldCheck, 
   LogOut, 
   LayoutDashboard, 
   ShoppingCart, 
   Store, 
   MapPin, 
-  ChevronDown, 
   UserCheck, 
   Activity, 
   BarChart3, 
@@ -21,11 +19,15 @@ import {
   X,
   Dumbbell,
   Receipt,
-  Smartphone,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  CalendarDays,
+  Ruler,
+  Trophy,
+  ShieldAlert
 } from "lucide-react";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
 
 export default function DashboardLayout({
   children,
@@ -35,51 +37,52 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [sucursalNombre, setSucursalNombre] = useState<string>("Sede Principal");
-  const [sucursalId, setSucursalId] = useState<string>("1");
   const [userName, setUserName] = useState<string>("Administrador");
   const [userRole, setUserRole] = useState<string>("ADMIN");
+  const [tenantName, setTenantName] = useState<string>("OnlyGym");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [modules, setModules] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const sName = localStorage.getItem("activeSucursalName");
-    const sId = localStorage.getItem("activeSucursalId");
-    if (sName) setSucursalNombre(sName);
-    if (sId) setSucursalId(sId);
-
-    fetch("/api/auth/get-session", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.session && data.session.user) {
-          setUserName(data.session.user.name || "Administrador");
-          setUserRole(data.session.user.role || "ADMIN");
-        }
-      })
-      .catch(() => {});
-  }, []);
+    void getStaffNavigationContext().then((result) => {
+      const sName = localStorage.getItem("activeSucursalName");
+      if (sName) setSucursalNombre(sName);
+      if (result.success && result.data) { setUserName(result.data.name); setUserRole(result.data.role); setModules(result.data.modules); setTenantName(result.data.tenantName); }
+      else router.replace("/login");
+    });
+  }, [router]);
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/sign-out", { credentials: "include" });
+      await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
       localStorage.removeItem("activeSucursalId");
       localStorage.removeItem("activeSucursalName");
-      router.push("/login");
-    } catch (e) {
-      router.push("/login");
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      router.replace("/login");
     }
   };
 
   const navItems = [
     { href: "/dashboard", label: "Inicio / Resumen", icon: LayoutDashboard },
-    { href: "/dashboard/clientes", label: "Socios (Ficha 360)", icon: Users },
+    { href: "/dashboard/entrenador", label: "Mi panel de entrenador", icon: UserCheck, roles: ["ENTRENADOR"] },
+    { href: "/dashboard/entrenadores", label: "Entrenadores", icon: UserCheck, roles: ["OWNER", "ADMIN"] },
+    { href: "/dashboard/clientes", label: "Socios (Ficha 360)", icon: Users, roles: ["OWNER", "ADMIN", "RECEPCION"], module: "socios" },
+    { href: "/dashboard/entrenamiento", label: "Planificación & Rutinas", icon: Dumbbell, module: "entrenamiento" },
+    { href: "/dashboard/clases", label: "Clases & Reservas", icon: CalendarDays, module: "clases" },
+    { href: "/dashboard/mediciones", label: "Mediciones & Progreso", icon: Ruler, module: "mediciones" },
+    { href: "/dashboard/recompensas", label: "Puntos & Beneficios", icon: Trophy, roles: ["ADMIN", "OWNER"], module: "puntos" },
     { href: "/dashboard/pagos", label: "Cobro de Cuotas", icon: CreditCard },
     { href: "/dashboard/cuentas", label: "Cuentas Corrientes", icon: Receipt },
     { href: "/dashboard/caja", label: "Punto de Venta / POS", icon: ShoppingCart },
     { href: "/dashboard/productos", label: "Inventario & Stock", icon: Store },
     { href: "/dashboard/aforo", label: "Aforo en Vivo", icon: Activity },
-    { href: "/dashboard/reportes", label: "Reportes & Finanzas", icon: BarChart3 },
-    { href: "/dashboard/empleados", label: "Personal & Accesos", icon: UserCheck },
-    { href: "/dashboard/configuracion", label: "Configuración & Sedes", icon: Settings },
-  ];
+    { href: "/dashboard/reportes", label: "Reportes & Finanzas", icon: BarChart3, roles: ["ADMIN", "OWNER"], module: "reportes" },
+    { href: "/dashboard/empleados", label: "Personal & Accesos", icon: UserCheck, roles: ["ADMIN", "OWNER"] },
+    { href: "/dashboard/configuracion", label: "Configuración & Sedes", icon: Settings, roles: ["ADMIN", "OWNER"] },
+    { href: "/dashboard/seguridad", label: "Seguridad & Auditoría", icon: ShieldAlert, roles: ["ADMIN", "OWNER"] },
+  ].filter((item) => (!item.roles || item.roles.includes(userRole)) && (!item.module || modules[item.module] !== false));
 
   const currentNav = navItems.find((n) => n.href === pathname) || { label: "Gestión" };
 
@@ -93,7 +96,7 @@ export default function DashboardLayout({
             <Dumbbell className="h-4 w-4" />
           </div>
           <div>
-            <span className="font-bold text-sm tracking-tight text-white">GymLink</span>
+            <span className="font-bold text-sm tracking-tight text-white">OnlyGym</span>
             <span className="ml-1 text-[10px] bg-cyan-950/80 text-cyan-300 font-semibold px-1.5 py-0.5 rounded border border-cyan-800/60">PRO</span>
           </div>
         </div>
@@ -114,16 +117,16 @@ export default function DashboardLayout({
       >
         {/* Brand Header */}
         <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2.5 group">
+          <Link href="/seleccionar-gimnasio" className="flex items-center gap-2.5 group" title="Cambiar gimnasio">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-cyan-600 via-sky-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-xs shadow-cyan-500/20">
               <Dumbbell className="h-4 w-4" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-white tracking-tight leading-none">GymLink</span>
+                <span className="font-bold text-sm text-white tracking-tight leading-none">OnlyGym</span>
                 <span className="text-[9px] bg-cyan-950/90 text-cyan-300 font-bold px-1.5 py-0.2 rounded border border-cyan-700/60 uppercase">PRO</span>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium">Gestión & Molinetes</span>
+              <span className="block max-w-40 truncate text-[11px] font-medium text-slate-400">{tenantName}</span>
             </div>
           </Link>
         </div>
@@ -186,7 +189,7 @@ export default function DashboardLayout({
 
         {/* Sidebar Footer / User Profile */}
         <div className="p-3 border-t border-slate-800/80 space-y-2">
-          <PWAInstallPrompt variant="sidebar" appName="GymLink Admin" />
+          <PWAInstallPrompt variant="sidebar" appName="OnlyGym Admin" />
 
           <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-slate-900/60 border border-slate-800/60">
             <div className="flex items-center gap-2 min-w-0">

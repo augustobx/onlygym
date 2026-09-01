@@ -1,11 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireMemberContext } from "@/lib/member-context";
 
 export async function consultarEstadoCliente(documento: string) {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { documento: documento.trim() },
+    const context = await requireMemberContext();
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: context.clienteId, tenantId: context.tenantId, documento: documento.trim() },
       include: {
         pagos: {
           orderBy: { fechaVencimiento: 'desc' },

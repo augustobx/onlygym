@@ -45,7 +45,7 @@ export default function PortalLoginPage() {
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md space-y-4">
         <div className="bg-slate-900/90 backdrop-blur-md py-6 px-6 sm:px-8 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form className="space-y-4" method="post" onSubmit={handleSubmit}>
             {error && (
               <div className="bg-rose-950/80 border border-rose-500/50 text-rose-200 px-3 py-2 rounded-xl text-xs text-center font-bold flex items-center justify-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -68,6 +68,7 @@ export default function PortalLoginPage() {
                   onChange={(e) => setUsuario(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-mono font-bold"
                   placeholder="Tu número de documento"
+                  autoComplete="username"
                   autoFocus
                 />
               </div>
@@ -88,6 +89,7 @@ export default function PortalLoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                 />
               </div>
               <p className="text-[10px] text-slate-500 mt-1.5 font-medium">Si es tu primer ingreso, tu clave por defecto es <strong className="text-cyan-400">123456</strong>.</p>
@@ -103,7 +105,7 @@ export default function PortalLoginPage() {
           </form>
         </div>
 
-        <PWAInstallPrompt variant="card" appName="GymLink Socio" />
+        <PWAInstallPrompt variant="card" appName="OnlyGym Socio" />
       </div>
     </div>
   );

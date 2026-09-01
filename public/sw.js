@@ -1,18 +1,18 @@
-const CACHE_NAME = "gymlink-pwa-v2";
-const OFFLINE_URL = "/";
+// OnlyGym PWA Service Worker
+const CACHE_NAME = "onlygym-cache-v1";
+const OFFLINE_URL = "/offline.html";
 
-const STATIC_ASSETS = [
+const PRECACHE_ASSETS = [
   "/",
-  "/login",
-  "/portal/login",
-  "/manifest.json",
-  "/favicon.ico"
+  "/manifest.webmanifest",
+  "/icons/icon-192x192.png",
+  "/icons/icon-512x512.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll(PRECACHE_ASSETS).catch(() => {});
     })
   );
   self.skipWaiting();
@@ -34,17 +34,54 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Only handle GET requests for navigation and static assets
-  if (event.request.method !== "GET") return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match(OFFLINE_URL) || caches.match("/");
+      })
+    );
+  }
+});
 
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request).then((response) => {
-        if (response) return response;
-        if (event.request.mode === "navigate") {
-          return caches.match(OFFLINE_URL);
+// Web Push Notification Handler
+self.addEventListener("push", (event) => {
+  let data = { title: "OnlyGym", body: "Tienes una nueva notificación de tu gimnasio." };
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
+  const options = {
+    body: data.body,
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-192x192.png",
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || "/portal/dashboard",
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const urlToOpen = event.notification.data?.url || "/portal/dashboard";
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (let i = 0; i < windowClients.length; i++) {
+        const client = windowClients[i];
+        if (client.url.includes(urlToOpen) && "focus" in client) {
+          return client.focus();
         }
-      });
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
     })
   );
 });

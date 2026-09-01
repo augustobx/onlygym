@@ -1,226 +1,212 @@
 "use server";
 
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import bcrypt from "bcryptjs";
+import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { getAforoEnVivo } from "@/app/actions/horarios";
 import { serializeData } from "@/lib/serialize";
+import { MEMBER_SESSION_COOKIE, hashSessionToken, requireMemberContext, resolveTenantForMemberLogin } from "@/lib/member-context";
 
-/**
- * Autenticación del Socio en el Portal
- */
+const SESSION_SECONDS = 60 * 60 * 24 * 14;
+
+async function passwordMatches(stored: string, candidate: string) {
+  if (stored.startsWith("$2")) return bcrypt.compare(candidate, stored);
+  const storedBuffer = Buffer.from(stored);
+  const candidateBuffer = Buffer.from(candidate);
+  return storedBuffer.length === candidateBuffer.length && timingSafeEqual(storedBuffer, candidateBuffer);
+}
+
+async function createMemberSession(tenantId: number, clienteId: number) {
+  const token = randomBytes(32).toString("base64url");
+  const requestHeaders = await headers();
+  await prisma.sesionSocio.create({
+    data: {
+      tenantId,
+      clienteId,
+      tokenHash: hashSessionToken(token),
+      expiraEn: new Date(Date.now() + SESSION_SECONDS * 1000),
+      userAgent: requestHeaders.get("user-agent")?.slice(0, 255),
+    },
+  });
+  const cookieStore = await cookies();
+  cookieStore.set(MEMBER_SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SESSION_SECONDS,
+    path: "/",
+  });
+  cookieStore.delete("gymlink_cliente_id");
+}
+
 export async function loginCliente(usuario: string, passwordStr: string) {
   try {
+    const tenant = await resolveTenantForMemberLogin();
+    if (!tenant) return { success: false, error: "Gimnasio no disponible" };
     const cleanUser = usuario.trim();
-
-    // Buscar en UsuarioCliente
-    const auth = await prisma.usuarioCliente.findFirst({
-      where: {
-        OR: [
-          { usuario: cleanUser },
-          { cliente: { documento: cleanUser } },
-        ],
-      },
+    const authRecord = await prisma.usuarioCliente.findFirst({
+      where: { tenantId: tenant.id, OR: [{ usuario: cleanUser }, { cliente: { documento: cleanUser, tenantId: tenant.id } }] },
       include: { cliente: true },
     });
-
-    if (!auth) {
-      return { success: false, error: "Usuario o DNI no encontrado" };
+    if (!authRecord || !(await passwordMatches(authRecord.password, passwordStr.trim()))) {
+      return { success: false, error: "Usuario o contraseña incorrectos" };
+    }
+    if (authRecord.cliente.estado !== "activo") {
+      return { success: false, error: "Tu cuenta se encuentra inactiva. Consultá en recepción." };
     }
 
-    if (auth.cliente.estado !== "activo") {
-      return { success: false, error: "Tu cuenta se encuentra inactiva. Consulta en recepción." };
-    }
-
-    const isValid = auth.password === passwordStr.trim();
-    if (!isValid) {
-      return { success: false, error: "Contraseña incorrecta" };
-    }
-
-    // Actualizar último acceso
+    const upgradedPassword = authRecord.password.startsWith("$2") ? undefined : await bcrypt.hash(passwordStr.trim(), 12);
     await prisma.usuarioCliente.update({
-      where: { id: auth.id },
-      data: { ultimoAcceso: new Date() },
+      where: { id: authRecord.id },
+      data: { ultimoAcceso: new Date(), ...(upgradedPassword ? { password: upgradedPassword } : {}) },
     });
-
-    // Set cookie de sesión de socio
-    const cookieStore = await cookies();
-    cookieStore.set("gymlink_cliente_id", String(auth.clienteId), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 14, // 2 semanas
-      path: "/",
-    });
-
-    return {
-      success: true,
-      debeCambiarPassword: auth.debeCambiarPassword,
-    };
+    await createMemberSession(tenant.id, authRecord.clienteId);
+    return { success: true, debeCambiarPassword: authRecord.debeCambiarPassword };
   } catch (error) {
-    console.error("Error en login cliente:", error);
-    return { success: false, error: "Error en el servidor al iniciar sesión" };
+    console.error("Error en login de socio:", error);
+    return { success: false, error: "No pudimos iniciar sesión" };
   }
 }
 
-/**
- * Cierra la sesión del socio
- */
 export async function logoutCliente() {
   const cookieStore = await cookies();
+  const rawToken = cookieStore.get(MEMBER_SESSION_COOKIE)?.value;
+  if (rawToken) await prisma.sesionSocio.deleteMany({ where: { tokenHash: hashSessionToken(rawToken) } });
+  cookieStore.delete(MEMBER_SESSION_COOKIE);
   cookieStore.delete("gymlink_cliente_id");
   return { success: true };
 }
 
-/**
- * Permite al socio cambiar su contraseña
- */
 export async function cambiarPasswordPortal(nuevaPassword: string) {
-  const cookieStore = await cookies();
-  const clienteId = cookieStore.get("gymlink_cliente_id")?.value;
-  if (!clienteId) return { success: false, error: "No autorizado" };
-
-  if (!nuevaPassword || nuevaPassword.trim().length < 6) {
-    return { success: false, error: "La contraseña debe tener al menos 6 caracteres" };
-  }
-
+  if (nuevaPassword.trim().length < 8) return { success: false, error: "La contraseña debe tener al menos 8 caracteres" };
   try {
-    await prisma.usuarioCliente.update({
-      where: { clienteId: Number(clienteId) },
-      data: {
-        password: nuevaPassword.trim(),
-        debeCambiarPassword: false,
-      },
-    });
-
-    return { success: true, mensaje: "Contraseña actualizada exitosamente" };
-  } catch (error) {
-    console.error("Error cambiando contraseña:", error);
-    return { success: false, error: "Error al actualizar la contraseña" };
+    const context = await requireMemberContext();
+    const password = await bcrypt.hash(nuevaPassword.trim(), 12);
+    await prisma.$transaction([
+      prisma.usuarioCliente.update({ where: { clienteId: context.clienteId }, data: { password, debeCambiarPassword: false } }),
+      prisma.sesionSocio.deleteMany({ where: { clienteId: context.clienteId } }),
+    ]);
+    await createMemberSession(context.tenantId, context.clienteId);
+    return { success: true, mensaje: "Contraseña actualizada" };
+  } catch {
+    return { success: false, error: "No se pudo actualizar la contraseña" };
   }
 }
 
-/**
- * Obtiene los datos integrales del socio, credencial QR, cuenta corriente y aforo de su sucursal
- */
 export async function getPortalData() {
-  const cookieStore = await cookies();
-  const clienteId = cookieStore.get("gymlink_cliente_id")?.value;
-  if (!clienteId) return { success: false, error: "No autorizado" };
-
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: Number(clienteId) },
+    const context = await requireMemberContext();
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: context.clienteId, tenantId: context.tenantId },
       include: {
-        pagos: {
-          include: { membresia: true },
-          orderBy: { fechaPago: "desc" },
-          take: 25,
-        },
-        ingresos: {
-          orderBy: { fechaHora: "desc" },
-          take: 25,
-        },
-        cuentaCorriente: {
-          include: {
-            movimientos: {
-              orderBy: { fecha: "desc" },
-              take: 25,
-            },
-          },
-        },
+        pagos: { include: { membresia: true }, orderBy: { fechaPago: "desc" }, take: 25 },
+        ingresos: { where: { tenantId: context.tenantId }, orderBy: { fechaHora: "desc" }, take: 60 },
+        cuentaCorriente: { include: { movimientos: { orderBy: { fecha: "desc" }, take: 25 } } },
         sucursales: true,
+        sucursalHabitual: true,
+        entrenador: { include: { user: { select: { name: true, image: true } } } },
         usuarioCliente: true,
+        objetivos: { where: { activo: true }, orderBy: [{ principal: "desc" }, { fechaInicio: "desc" }] },
+        asignacionesEntrenamiento: {
+          where: { estado: "activa" },
+          include: { plan: true, rutina: { include: { ejercicios: { include: { ejercicio: true }, orderBy: [{ dia: "asc" }, { orden: "asc" }] } } } },
+          take: 1,
+        },
+        sesionesEntrenamiento: { include: { rutina: { select: { nombre: true } }, ejercicios: { include: { ejercicio: { select: { nombre: true, grupoMuscular: true } }, series: { orderBy: { numero: "asc" } } }, orderBy: { orden: "asc" } } }, orderBy: { iniciadaEn: "desc" }, take: 30 },
+        mediciones: { orderBy: { fecha: "desc" }, take: 20 },
+        fotosProgreso: { select: { id: true, fecha: true, tipo: true, mimeType: true }, orderBy: [{ fecha: "desc" }, { id: "desc" }], take: 30 },
+        reservas: {
+          where: { estado: { in: ["confirmada", "espera"] }, clase: { inicio: { gte: new Date() } } },
+          include: { clase: { include: { tipoClase: true, sucursal: true, entrenador: { include: { user: true } } } } },
+          orderBy: { clase: { inicio: "asc" } },
+          take: 10,
+        },
+        notificaciones: { orderBy: { creadaEn: "desc" }, take: 20 },
       },
     });
+    if (!cliente) return { success: false, error: "Socio no encontrado" };
 
-    if (!cliente) return { success: false, error: "Cliente no encontrado" };
-
-    // Obtener aforo en tiempo real de su sucursal principal
-    const sucursalId = cliente.sucursales?.[0]?.id || 1;
-    const aforoRes = await getAforoEnVivo(sucursalId);
-    const aforo = aforoRes.success ? aforoRes.data : null;
-
-    // Horarios valle recomendados
-    const horasRecomendadas = [
-      { turno: "Mañana Temprana", rango: "07:00 a 10:30", afluencia: "Baja (Ideal)" },
-      { turno: "Mediodía / Siesta", rango: "13:30 a 16:30", afluencia: "Media-Baja" },
-      { turno: "Noche", rango: "21:00 a 23:00", afluencia: "Baja" },
-    ];
-
-    return {
-      success: true,
-      data: serializeData({
-        ...cliente,
-        pagos: cliente.pagos.map((p) => ({
-          ...p,
-          monto: Number(p.monto),
-          membresia: p.membresia ? { ...p.membresia, precio: Number(p.membresia.precio) } : null,
-        })),
-        cuentaCorriente: cliente.cuentaCorriente
-          ? {
-              ...cliente.cuentaCorriente,
-              saldo: Number(cliente.cuentaCorriente.saldo),
-              limiteCredito: Number(cliente.cuentaCorriente.limiteCredito),
-              movimientos: cliente.cuentaCorriente.movimientos.map((m) => ({
-                ...m,
-                monto: Number(m.monto),
-              })),
-            }
-          : null,
-        aforo,
-        horasRecomendadas,
-        debeCambiarPassword: cliente.usuarioCliente?.debeCambiarPassword ?? false,
+    const sucursalId = cliente.sucursalHabitualId || cliente.sucursales[0]?.id || null;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const diaSemana = new Date().getDay();
+    const [aforo, saldoPuntos, historialReservas] = await Promise.all([
+      sucursalId
+        ? Promise.all([
+            prisma.ingreso.count({
+              where: {
+                tenantId: context.tenantId,
+                sucursalId,
+                fechaHora: { gte: hoy },
+                estado: { in: ["permitido", "ACTIVO"] },
+                horaSalida: null,
+              },
+            }),
+            prisma.configuracionHorario.findUnique({
+              where: { sucursalId_diaSemana: { sucursalId, diaSemana } },
+              select: { capacidadMaxima: true },
+            }),
+          ]).then(([personasAdentro, horario]) => {
+            const capacidadMaxima = horario?.capacidadMaxima || 50;
+            const porcentaje = capacidadMaxima > 0
+              ? Math.min(100, Math.round((personasAdentro / capacidadMaxima) * 100))
+              : 0;
+            return { personasAdentro, capacidadMaxima, porcentaje };
+          })
+        : Promise.resolve(null),
+      prisma.movimientoPuntos.aggregate({ where: { tenantId: context.tenantId, clienteId: context.clienteId }, _sum: { puntos: true } }),
+      prisma.reservaClase.findMany({
+        where: { tenantId: context.tenantId, clienteId: context.clienteId, OR: [{ estado: { in: ["cancelada", "asistio"] } }, { clase: { inicio: { lt: new Date() } } }] },
+        include: { clase: { include: { tipoClase: true, sucursal: true, entrenador: { include: { user: { select: { name: true } } } } } } },
+        orderBy: { creadaEn: "desc" }, take: 30,
       }),
-    };
-  } catch (error) {
-    console.error("Error cargando portal:", error);
-    return { success: false, error: "Error cargando datos del portal" };
+    ]);
+    const visitasMes = cliente.ingresos.filter((ingreso) => ingreso.estado === "ACTIVO" && ingreso.fechaHora >= inicioMes).length;
+
+    return { success: true, data: serializeData({
+      ...cliente,
+      tenant: context.tenant,
+      pagos: cliente.pagos.map((p) => ({ ...p, monto: Number(p.monto), membresia: { ...p.membresia, precio: Number(p.membresia.precio) } })),
+      cuentaCorriente: cliente.cuentaCorriente ? {
+        ...cliente.cuentaCorriente,
+        saldo: Number(cliente.cuentaCorriente.saldo),
+        limiteCredito: Number(cliente.cuentaCorriente.limiteCredito),
+        movimientos: cliente.cuentaCorriente.movimientos.map((m) => ({ ...m, monto: Number(m.monto) })),
+      } : null,
+      aforo,
+      visitasMes,
+      puntos: saldoPuntos._sum.puntos || 0,
+      historialReservas,
+      debeCambiarPassword: cliente.usuarioCliente?.debeCambiarPassword ?? false,
+    }) };
+  } catch {
+    return { success: false, error: "No autorizado" };
   }
 }
 
-/**
- * Obtiene el detalle desglosado de un ticket de compra de cantina para el socio
- */
 export async function getDetalleTicketVenta(ticketId: number) {
   try {
-    const venta = await prisma.venta.findUnique({
-      where: { id: ticketId },
-      include: {
-        cliente: true,
-        user: true,
-        sucursal: true,
-        items: {
-          include: {
-            producto: true,
-          },
-        },
-      },
+    const context = await requireMemberContext();
+    const venta = await prisma.venta.findFirst({
+      where: { id: ticketId, tenantId: context.tenantId, clienteId: context.clienteId },
+      include: { cliente: true, user: true, sucursal: true, items: { include: { producto: true } } },
     });
-
-    if (!venta) {
-      return { success: false, error: "Ticket de venta no encontrado" };
-    }
-
-    const data = {
+    if (!venta) return { success: false, error: "Ticket no encontrado" };
+    return { success: true, data: serializeData({
       id: venta.id,
       fechaVenta: venta.fechaVenta,
       total: Number(venta.total),
       tipoPago: venta.tipoPago,
-      cliente: venta.cliente ? `${venta.cliente.nombre} ${venta.cliente.apellido}` : "Cliente Mostrador",
+      cliente: `${venta.cliente?.nombre || ""} ${venta.cliente?.apellido || ""}`.trim(),
       documento: venta.cliente?.documento || null,
       sucursal: venta.sucursal?.nombre || "Sede Principal",
-      vendedor: venta.user?.name || "Cajero",
-      items: venta.items.map((it) => ({
-        id: it.id,
-        nombre: it.producto?.nombre || "Producto",
-        cantidad: it.cantidad,
-        precioUnitario: Number(it.precioUnitario),
-        subtotal: Number(it.subtotal),
-      })),
-    };
-
-    return { success: true, data: serializeData(data) };
-  } catch (error) {
-    console.error("Error obteniendo ticket de venta:", error);
-    return { success: false, error: "Error al cargar detalle del ticket" };
+      vendedor: venta.user?.name || "Recepción",
+      items: venta.items.map((item) => ({ id: item.id, nombre: item.producto.nombre, cantidad: item.cantidad, precioUnitario: Number(item.precioUnitario), subtotal: Number(item.subtotal) })),
+    }) };
+  } catch {
+    return { success: false, error: "No autorizado" };
   }
 }

@@ -2,13 +2,15 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { verificarHorarioAtencion } from "@/app/actions/horarios";
+import { checkBranchSchedule } from "@/lib/access-schedule";
+import { getTenantModules, requireStaffContext } from "@/lib/tenant-context";
 
 export async function registrarIngresoMolinete(documento: string, sucursalId: number) {
   try {
+    const context = await requireStaffContext({ branchId: sucursalId });
     // Buscar cliente por documento
-    const cliente = await prisma.cliente.findUnique({
-      where: { documento: documento.trim() },
+    const cliente = await prisma.cliente.findFirst({
+      where: { tenantId: context.tenantId, documento: documento.trim(), sucursales: { some: { id: sucursalId } } },
       include: {
         pagos: {
           orderBy: { fechaVencimiento: 'desc' },
@@ -26,10 +28,11 @@ export async function registrarIngresoMolinete(documento: string, sucursalId: nu
     }
 
     // Verificar horario de atención del gimnasio
-    const horario = await verificarHorarioAtencion(sucursalId);
+    const horario = await checkBranchSchedule(sucursalId);
     if (!horario.permitido) {
       await prisma.ingreso.create({
         data: {
+          tenantId: context.tenantId,
           clienteId: cliente.id,
           sucursalId,
           documento: cliente.documento,
@@ -70,16 +73,25 @@ export async function registrarIngresoMolinete(documento: string, sucursalId: nu
       }
     }
 
-    // Registrar en BD
-    const ingreso = await prisma.ingreso.create({
-      data: {
+    const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0);
+    const visitaPuntuada = estadoAcceso === "ACTIVO" ? await prisma.ingreso.findFirst({ where: { tenantId: context.tenantId, clienteId: cliente.id, estado: "ACTIVO", fechaHora: { gte: inicioDia } }, select: { id: true } }) : null;
+    const modules = await getTenantModules(context.tenantId);
+    const ingreso = await prisma.$transaction(async (tx) => {
+      const created = await tx.ingreso.create({ data: {
+        tenantId: context.tenantId,
         clienteId: cliente.id,
         sucursalId: sucursalId,
         documento: cliente.documento,
         estado: estadoAcceso,
         motivo: estadoAcceso === "ACTIVO" ? "Ingreso regular" : mensaje,
         diasVencido: diasVencido
+      } });
+      if (estadoAcceso === "ACTIVO") {
+        const classBooking = await tx.reservaClase.findFirst({ where: { tenantId: context.tenantId, clienteId: cliente.id, estado: "confirmada", clase: { inicio: { gte: new Date(Date.now() - 30 * 60000), lte: new Date(Date.now() + 90 * 60000) }, sucursalId } }, orderBy: { clase: { inicio: "asc" } } });
+        if (classBooking) await tx.reservaClase.update({ where: { id: classBooking.id }, data: { estado: "asistio", asistenciaEn: new Date() } });
       }
+      if (estadoAcceso === "ACTIVO" && !visitaPuntuada && modules.puntos) await tx.movimientoPuntos.create({ data: { tenantId: context.tenantId, clienteId: cliente.id, puntos: 10, tipo: "asistencia", concepto: "Visita al gimnasio", referencia: `ingreso:${created.id}` } });
+      return created;
     });
 
     // Devolvemos el resultado a la pantalla gigante
@@ -104,8 +116,9 @@ export async function registrarIngresoMolinete(documento: string, sucursalId: nu
 
 export async function getUltimosIngresos(sucursalId: number) {
   try {
+    const context = await requireStaffContext({ branchId: sucursalId });
     const ingresos = await prisma.ingreso.findMany({
-      where: { sucursalId },
+      where: { tenantId: context.tenantId, sucursalId },
       orderBy: { fechaHora: 'desc' },
       take: 8,
       include: {

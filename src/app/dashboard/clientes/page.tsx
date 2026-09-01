@@ -90,7 +90,7 @@ export default function ClientesPage() {
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `socios_gymlink_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `socios_onlygym_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -102,7 +102,7 @@ export default function ClientesPage() {
     const cleanPhone = cliente.telefono.replace(/\D/g, "");
     const nombre = `${cliente.nombre} ${cliente.apellido}`;
     const vencimiento = cliente.ultimoPago?.fechaVencimiento ? formatDate(cliente.ultimoPago.fechaVencimiento) : "recientemente";
-    const mensaje = encodeURIComponent(`Hola ${nombre}! Te recordamos de GymLink que tu cuota de gimnasio venció el ${vencimiento}. Te esperamos para renovar tu membresía y seguir entrenando! 💪`);
+    const mensaje = encodeURIComponent(`Hola ${nombre}! Te recordamos desde OnlyGym que tu cuota de gimnasio venció el ${vencimiento}. Te esperamos para renovar tu membresía y seguir entrenando! 💪`);
     return `https://wa.me/${cleanPhone}?text=${mensaje}`;
   };
 

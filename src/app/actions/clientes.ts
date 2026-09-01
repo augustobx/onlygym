@@ -4,13 +4,25 @@ import { prisma } from "@/lib/prisma";
 import { clienteSchema, ClienteData } from "@/lib/schemas";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
+import { Prisma, RolTenant } from "@prisma/client";
+import { hash } from "bcryptjs";
+import { getStaffMemberScope } from "@/lib/staff-member-access";
+import { randomBytes } from "node:crypto";
+import { writeAudit } from "@/lib/audit";
+
+function temporaryMemberPassword() {
+  return `${randomBytes(8).toString("base64url")}9!`;
+}
 
 /**
  * Obtiene clientes de forma básica
  */
 export async function getClientes() {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
     const clientes = await prisma.cliente.findMany({
+      where: { tenantId: context.tenantId },
       orderBy: { fechaRegistro: "desc" },
     });
     return { success: true, data: serializeData(clientes) };
@@ -31,11 +43,13 @@ export async function getClientesPaginados(params: {
   sucursalId?: number;
 }) {
   try {
+    const context = await requireStaffContext({ ...(params.sucursalId ? { branchId: params.sucursalId } : {}), roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    await requireTenantModule(context.tenantId, "socios");
     const page = Math.max(1, params.page || 1);
     const limit = Math.min(100, Math.max(5, params.limit || 15));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.ClienteWhereInput = { tenantId: context.tenantId };
 
     // Filtro por sucursal
     if (params.sucursalId) {
@@ -57,9 +71,6 @@ export async function getClientesPaginados(params: {
     }
 
     const hoy = new Date();
-    const hoyInicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-    const en7Dias = new Date(hoyInicio.getTime() + 7 * 24 * 60 * 60 * 1000);
-
     // Filtros de estado
     if (params.estado === "activo") {
       where.estado = "activo";
@@ -164,17 +175,24 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
   if (!result.success) {
     return {
       success: false,
-      error: result.error.issues.map((e: any) => e.message).join(", "),
+      error: result.error.issues.map((issue) => issue.message).join(", "),
     };
   }
 
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    await requireTenantModule(context.tenantId, "socios");
     const cleanDoc = result.data.documento.trim();
+    const allowedBranches = data.sucursalesIds?.length ? await prisma.sucursal.findMany({ where: { tenantId: context.tenantId, id: { in: data.sucursalesIds } }, select: { id: true } }) : [];
+    if (data.sucursalesIds?.length && allowedBranches.length !== new Set(data.sucursalesIds).size) return { success: false, error: "Una sucursal no pertenece al gimnasio" };
+    const temporaryPassword = temporaryMemberPassword();
+    const initialPassword = await hash(temporaryPassword, 12);
 
     const clienteCreado = await prisma.$transaction(async (tx) => {
       // 1. Crear el Cliente
       const cliente = await tx.cliente.create({
         data: {
+          tenantId: context.tenantId,
           documento: cleanDoc,
           nombre: result.data.nombre.trim(),
           apellido: result.data.apellido.trim(),
@@ -184,7 +202,7 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
           foto: result.data.foto || null,
           estado: result.data.estado || "activo",
           sucursales: data.sucursalesIds && data.sucursalesIds.length > 0
-            ? { connect: data.sucursalesIds.map((id) => ({ id })) }
+            ? { connect: allowedBranches.map(({ id }) => ({ id })) }
             : undefined,
         },
       });
@@ -192,9 +210,10 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
       // 2. Crear automáticamente las credenciales del portal (DNI / 123456)
       await tx.usuarioCliente.create({
         data: {
+          tenantId: context.tenantId,
           clienteId: cliente.id,
           usuario: cleanDoc,
-          password: "123456",
+          password: initialPassword,
           debeCambiarPassword: true,
         },
       });
@@ -216,10 +235,11 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
     revalidatePath("/dashboard/caja");
     revalidatePath("/molinete");
 
-    return { success: true, data: serializeData(clienteCreado) };
-  } catch (error: any) {
+    await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "socio.crear", entidad: "Cliente", entidadId: clienteCreado.id });
+    return { success: true, data: serializeData(clienteCreado), temporaryPassword };
+  } catch (error: unknown) {
     console.error("Error al crear cliente:", error);
-    if (error.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { success: false, error: "Ya existe un cliente con ese número de documento" };
     }
     return { success: false, error: "Error interno al crear el cliente" };
@@ -231,10 +251,10 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
  */
 export async function updateCliente(id: number, data: Partial<ClienteData>) {
   try {
-    const updated = await prisma.cliente.update({
-      where: { id },
-      data,
-    });
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    const updatedResult = await prisma.cliente.updateMany({ where: { id, tenantId: context.tenantId }, data });
+    if (!updatedResult.count) return { success: false, error: "Cliente no encontrado" };
+    const updated = await prisma.cliente.findFirst({ where: { id, tenantId: context.tenantId } });
     revalidatePath("/dashboard/clientes");
     revalidatePath(`/dashboard/clientes/${id}`);
     revalidatePath("/molinete");
@@ -250,8 +270,10 @@ export async function updateCliente(id: number, data: Partial<ClienteData>) {
  */
 export async function getCliente(id: number) {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id },
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION, RolTenant.ENTRENADOR] });
+    const memberScope = await getStaffMemberScope(context);
+    const cliente = await prisma.cliente.findFirst({
+      where: { id, ...memberScope },
       include: {
         pagos: {
           include: { membresia: true },
@@ -271,13 +293,16 @@ export async function getCliente(id: number) {
           },
         },
         sucursales: true,
-        usuarioCliente: true,
+        usuarioCliente: { select: { usuario: true, debeCambiarPassword: true, ultimoAcceso: true } },
       },
     });
 
     if (!cliente) return { success: false, error: "Cliente no encontrado" };
 
-    return { success: true, data: serializeData(cliente) };
+    const visible = context.role === RolTenant.ENTRENADOR
+      ? { ...cliente, pagos: [], cuentaCorriente: null, usuarioCliente: null }
+      : cliente;
+    return { success: true, data: serializeData(visible) };
   } catch (error) {
     console.error("Error al obtener cliente:", error);
     return { success: false, error: "No se pudo obtener el cliente" };
@@ -297,11 +322,13 @@ export async function renovarMembresiaCliente360(data: {
   extenderDesdeVencimiento?: boolean;
 }) {
   try {
+    const context = await requireStaffContext({ branchId: data.sucursalId || undefined, roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    await requireTenantModule(context.tenantId, "membresias");
     const { clienteId, membresiaId, sucursalId = 1, metodoPago = "efectivo", notas, extenderDesdeVencimiento = true } = data;
 
     const [cliente, membresia] = await Promise.all([
-      prisma.cliente.findUnique({
-        where: { id: clienteId },
+      prisma.cliente.findFirst({
+        where: { id: clienteId, tenantId: context.tenantId },
         include: {
           pagos: {
             orderBy: { fechaVencimiento: "desc" },
@@ -310,8 +337,8 @@ export async function renovarMembresiaCliente360(data: {
           cuentaCorriente: true,
         },
       }),
-      prisma.membresia.findUnique({
-        where: { id: membresiaId },
+      prisma.membresia.findFirst({
+        where: { id: membresiaId, tenantId: context.tenantId },
       }),
     ]);
 
@@ -338,6 +365,7 @@ export async function renovarMembresiaCliente360(data: {
       // 1. Crear el pago
       const nuevoPago = await tx.pago.create({
         data: {
+          tenantId: context.tenantId,
           clienteId,
           membresiaId,
           sucursalId,
@@ -409,33 +437,27 @@ export async function renovarMembresiaCliente360(data: {
  */
 export async function resetPasswordCliente(clienteId: number) {
   try {
-    const auth = await prisma.usuarioCliente.findUnique({
-      where: { clienteId },
-    });
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const auth = await prisma.usuarioCliente.findFirst({ where: { clienteId, tenantId: context.tenantId } });
+    const temporaryPassword = temporaryMemberPassword();
+    const password = await hash(temporaryPassword, 12);
 
     if (!auth) {
-      const cliente = await prisma.cliente.findUnique({ where: { id: clienteId } });
+      const cliente = await prisma.cliente.findFirst({ where: { id: clienteId, tenantId: context.tenantId } });
       if (!cliente) return { success: false, error: "Cliente no encontrado" };
 
-      await prisma.usuarioCliente.create({
-        data: {
-          clienteId,
-          usuario: cliente.documento.trim(),
-          password: "123456",
-          debeCambiarPassword: true,
-        },
-      });
+      await prisma.$transaction([
+        prisma.usuarioCliente.create({ data: { tenantId: context.tenantId, clienteId, usuario: cliente.documento.trim(), password, debeCambiarPassword: true } }),
+        prisma.sesionSocio.deleteMany({ where: { tenantId: context.tenantId, clienteId } }),
+      ]);
     } else {
-      await prisma.usuarioCliente.update({
-        where: { clienteId },
-        data: {
-          password: "123456",
-          debeCambiarPassword: true,
-        },
-      });
+      await prisma.$transaction([
+        prisma.usuarioCliente.update({ where: { clienteId }, data: { password, debeCambiarPassword: true } }),
+        prisma.sesionSocio.deleteMany({ where: { tenantId: context.tenantId, clienteId } }),
+      ]);
     }
-
-    return { success: true, mensaje: "Contraseña reseteada exitosamente a '123456'" };
+    await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "socio.password_temporal", entidad: "Cliente", entidadId: clienteId });
+    return { success: true, mensaje: "Contraseña temporal generada. Las sesiones anteriores fueron cerradas.", temporaryPassword };
   } catch (error) {
     console.error("Error reseteando contraseña:", error);
     return { success: false, error: "Error al resetear contraseña" };
@@ -447,11 +469,13 @@ export async function resetPasswordCliente(clienteId: number) {
  */
 export async function toggleClienteEstado(id: number, estadoActual: string) {
   try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
     const nuevoEstado = estadoActual === "activo" ? "inactivo" : "activo";
-    await prisma.cliente.update({
-      where: { id },
+    const result = await prisma.cliente.updateMany({
+      where: { id, tenantId: context.tenantId },
       data: { estado: nuevoEstado },
     });
+    if (!result.count) return { success: false, error: "Cliente no encontrado" };
 
     revalidatePath("/dashboard/clientes");
     revalidatePath("/molinete");
@@ -467,7 +491,8 @@ export async function toggleClienteEstado(id: number, estadoActual: string) {
  */
 export async function exportarClientesData(sucursalId?: number) {
   try {
-    const where: any = {};
+    const context = await requireStaffContext({ ...(sucursalId ? { branchId: sucursalId } : {}), roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    const where: Prisma.ClienteWhereInput = { tenantId: context.tenantId };
     if (sucursalId) {
       where.sucursales = { some: { id: sucursalId } };
     }

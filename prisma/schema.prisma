@@ -6,48 +6,137 @@ datasource db {
   provider = "postgresql"
 }
 
-model Sucursal {
-  id          Int      @id @default(autoincrement())
-  nombre      String   @db.VarChar(100)
-  direccion   String?  @db.VarChar(255)
-  estado      String   @default("activo")
-  
-  clientes       Cliente[]
-  ingresos       Ingreso[]
-  pagos          Pago[]
-  ventas         Venta[]
-  usuarios       User[]
-  membresias     Membresia[]
-  productos      Producto[]
-  horarios       ConfiguracionHorario[]
+enum RolTenant {
+  OWNER
+  ADMIN
+  RECEPCION
+  ENTRENADOR
+}
 
+model Tenant {
+  id               Int       @id @default(autoincrement())
+  nombre           String    @db.VarChar(120)
+  slug             String    @unique @db.VarChar(80)
+  estado           String    @default("activo") // activo, suspendido, prueba, cancelado
+  plan             String    @default("profesional")
+  planSaaSId       Int?      @map("plan_saas_id")
+  modulos          Json?
+  fechaAlta        DateTime  @default(now()) @map("fecha_alta")
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  creadoEn         DateTime  @default(now()) @map("creado_en")
+  actualizadoEn    DateTime  @updatedAt @map("actualizado_en")
+
+  planSaaS                  PlanSaaS?                 @relation(fields: [planSaaSId], references: [id])
+  suscripciones             SuscripcionSaaS[]
+  sucursales                Sucursal[]
+  usuarios                  TenantUsuario[]
+  clientes                  Cliente[]
+  membresias                Membresia[]
+  pagos                     Pago[]
+  productos                 Producto[]
+  ventas                    Venta[]
+  ingresos                  Ingreso[]
+  ejercicios                Ejercicio[]
+  rutinas                   Rutina[]
+  planesEntrenamiento       PlanEntrenamiento[]
+  asignacionesEntrenamiento AsignacionEntrenamiento[]
+  sesionesEntrenamiento     SesionEntrenamiento[]
+  mediciones                MedicionCorporal[]
+  fotosProgreso             FotoProgreso[]
+  perfilesEntrenador        PerfilEntrenador[]
+  tiposClase                TipoClase[]
+  clases                    Clase[]
+  reservas                  ReservaClase[]
+  movimientosPuntos         MovimientoPuntos[]
+  premios                   Premio[]
+  canjes                    CanjePremio[]
+  beneficios                Beneficio[]
+  reglasPuntos              ReglaPuntos[]
+  desafios                  Desafio[]
+  participacionesDesafios   ParticipacionDesafio[]
+  seguimientosCliente       SeguimientoCliente[]
+  pushSubscriptions         WebPushSubscription[]
+  registroNotificaciones    RegistroNotificacion[]
+  notificaciones            Notificacion[]
+  sesionesSocio             SesionSocio[]
+  usuarioClientes           UsuarioCliente[]
+  auditorias                Auditoria[]
+
+  @@map("tenants")
+}
+
+model TenantUsuario {
+  id       Int       @id @default(autoincrement())
+  tenantId Int       @map("tenant_id")
+  userId   String    @map("user_id")
+  rol      RolTenant
+  estado   String    @default("activo")
+  creadoEn DateTime  @default(now()) @map("creado_en")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId, estado])
+  @@map("tenant_usuarios")
+}
+
+model Sucursal {
+  id        Int     @id @default(autoincrement())
+  tenantId  Int     @map("tenant_id")
+  nombre    String  @db.VarChar(100)
+  direccion String? @db.VarChar(255)
+  telefono  String? @db.VarChar(30)
+  capacidad Int?
+  estado    String  @default("activo")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  clientes           Cliente[]
+  ingresos           Ingreso[]
+  pagos              Pago[]
+  ventas             Venta[]
+  usuarios           User[]
+  membresias         Membresia[]
+  productos          Producto[]
+  horarios           ConfiguracionHorario[]
+  clases             Clase[]
+  perfilesEntrenador PerfilEntrenador[]
+  clientesHabituales Cliente[]              @relation("SucursalHabitual")
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId, estado])
   @@map("sucursales")
 }
 
 // --- BETTER AUTH CORE TABLES ---
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  username      String?   @unique
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  username        String?  @unique
   displayUsername String?
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  sessions      Session[]
-  accounts      Account[]
+  emailVerified   Boolean  @default(false)
+  image           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sessions Session[]
+  accounts Account[]
 
   // GymLink Custom Fields
-  nivel         String    @default("cajero") // admin, supervisor, cajero
-  estado        String    @default("activo")
-  
+  nivel  String @default("cajero") // admin, supervisor, cajero
+  estado String @default("activo")
+
   // Relations
-  sucursales    Sucursal[]
-  ventas        Venta[]
+  sucursales        Sucursal[]
+  ventas            Venta[]
   movimientosCuenta CuentaMovimiento[]
+  tenantMemberships TenantUsuario[]
+  perfilEntrenador  PerfilEntrenador?
+  seguimientos      SeguimientoCliente[]
+  pushSubscriptions WebPushSubscription[]
 
   @@map("user")
 }
@@ -87,12 +176,12 @@ model Account {
 }
 
 model Verification {
-  id         String    @id @default(cuid())
+  id         String   @id @default(cuid())
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("verification")
 }
@@ -100,119 +189,153 @@ model Verification {
 // --- GYMLINK TABLES ---
 
 model Cliente {
-  id              Int               @id @default(autoincrement())
-  documento       String            @unique @db.VarChar(20)
-  nombre          String            @db.VarChar(100)
-  apellido        String            @db.VarChar(100)
-  telefono        String?           @db.VarChar(20)
-  email           String?           @db.VarChar(100)
-  direccion       String?           @db.VarChar(255)
-  foto            String?           @db.Text
-  fechaRegistro   DateTime          @default(now()) @map("fecha_registro")
-  estado          String            @default("activo")
-  
-  sucursales      Sucursal[]
-  pagos           Pago[]
-  ingresos        Ingreso[]
-  ventas          Venta[]
-  usuarioCliente  UsuarioCliente?
-  cuentaCorriente CuentaCorriente?
+  id                 Int       @id @default(autoincrement())
+  tenantId           Int       @map("tenant_id")
+  documento          String    @db.VarChar(20)
+  nombre             String    @db.VarChar(100)
+  apellido           String    @db.VarChar(100)
+  telefono           String?   @db.VarChar(20)
+  email              String?   @db.VarChar(100)
+  direccion          String?   @db.VarChar(255)
+  foto               String?   @db.Text
+  fechaNacimiento    DateTime? @map("fecha_nacimiento") @db.Date
+  contactoEmergencia String?   @map("contacto_emergencia") @db.VarChar(180)
+  sucursalHabitualId Int?      @map("sucursal_habitual_id")
+  entrenadorId       Int?      @map("entrenador_id")
+  fechaRegistro      DateTime  @default(now()) @map("fecha_registro")
+  estado             String    @default("activo")
 
-  @@index([documento])
-  @@index([nombre, apellido])
+  tenant                    Tenant                    @relation(fields: [tenantId], references: [id])
+  sucursalHabitual          Sucursal?                 @relation("SucursalHabitual", fields: [sucursalHabitualId], references: [id])
+  entrenador                PerfilEntrenador?         @relation(fields: [entrenadorId], references: [id])
+  sucursales                Sucursal[]
+  pagos                     Pago[]
+  ingresos                  Ingreso[]
+  ventas                    Venta[]
+  usuarioCliente            UsuarioCliente?
+  cuentaCorriente           CuentaCorriente?
+  objetivos                 ObjetivoSocio[]
+  asignacionesEntrenamiento AsignacionEntrenamiento[]
+  sesionesEntrenamiento     SesionEntrenamiento[]
+  mediciones                MedicionCorporal[]
+  fotosProgreso             FotoProgreso[]
+  reservas                  ReservaClase[]
+  movimientosPuntos         MovimientoPuntos[]
+  canjes                    CanjePremio[]
+  participacionesDesafios   ParticipacionDesafio[]
+  seguimientos              SeguimientoCliente[]
+  pushSubscriptions         WebPushSubscription[]
+  registroNotificaciones    RegistroNotificacion[]
+  notificaciones            Notificacion[]
+  sesionesSocio             SesionSocio[]
+
+  @@unique([tenantId, documento])
+  @@index([tenantId, nombre, apellido])
+  @@index([tenantId, estado])
   @@map("clientes")
 }
 
 model Membresia {
-  id              Int      @id @default(autoincrement())
-  nombre          String   @db.VarChar(50)
-  diasDuracion    Int      @map("dias_duracion")
-  precio          Decimal  @db.Decimal(10, 2)
-  descripcion     String?  @db.Text
-  estado          String   @default("activo")
+  id           Int     @id @default(autoincrement())
+  tenantId     Int     @map("tenant_id")
+  nombre       String  @db.VarChar(50)
+  diasDuracion Int     @map("dias_duracion")
+  precio       Decimal @db.Decimal(10, 2)
+  descripcion  String? @db.Text
+  estado       String  @default("activo")
 
-  pagos           Pago[]
-  sucursales      Sucursal[]
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  pagos      Pago[]
+  sucursales Sucursal[]
 
+  @@index([tenantId, estado])
   @@map("membresias")
 }
 
 model Pago {
-  id              Int       @id @default(autoincrement())
-  clienteId       Int       @map("cliente_id")
-  membresiaId     Int       @map("membresia_id")
-  sucursalId      Int?      @map("sucursal_id")
-  fechaPago       DateTime  @default(now()) @map("fecha_pago")
-  fechaVencimiento DateTime  @map("fecha_vencimiento") @db.Date
-  monto           Decimal   @db.Decimal(10, 2)
-  metodoPago      String?   @default("efectivo") @map("metodo_pago")
-  estado          String    @default("pagado")
-  notas           String?   @db.Text
+  id               Int      @id @default(autoincrement())
+  tenantId         Int      @map("tenant_id")
+  clienteId        Int      @map("cliente_id")
+  membresiaId      Int      @map("membresia_id")
+  sucursalId       Int?     @map("sucursal_id")
+  fechaPago        DateTime @default(now()) @map("fecha_pago")
+  fechaVencimiento DateTime @map("fecha_vencimiento") @db.Date
+  monto            Decimal  @db.Decimal(10, 2)
+  metodoPago       String?  @default("efectivo") @map("metodo_pago")
+  estado           String   @default("pagado")
+  notas            String?  @db.Text
 
-  cliente         Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  membresia       Membresia @relation(fields: [membresiaId], references: [id])
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  cliente   Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  membresia Membresia @relation(fields: [membresiaId], references: [id])
+  sucursal  Sucursal? @relation(fields: [sucursalId], references: [id])
 
   @@index([clienteId])
   @@index([fechaVencimiento])
   @@index([sucursalId])
+  @@index([tenantId, fechaPago])
   @@map("pagos")
 }
 
 model Producto {
-  id              Int       @id @default(autoincrement())
-  codigo          String?   @unique @db.VarChar(50)
-  nombre          String    @db.VarChar(150)
-  descripcion     String?   @db.Text
-  precio          Decimal   @db.Decimal(10, 2)
-  stock           Int       @default(0)
-  stockMinimo     Int       @default(5) @map("stock_minimo")
-  categoria       String?   @db.VarChar(50)
-  imagen          String?   @db.VarChar(255)
-  estado          String    @default("activo")
-  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+  id            Int      @id @default(autoincrement())
+  tenantId      Int      @map("tenant_id")
+  codigo        String?  @db.VarChar(50)
+  nombre        String   @db.VarChar(150)
+  descripcion   String?  @db.Text
+  precio        Decimal  @db.Decimal(10, 2)
+  stock         Int      @default(0)
+  stockMinimo   Int      @default(5) @map("stock_minimo")
+  categoria     String?  @db.VarChar(50)
+  imagen        String?  @db.VarChar(255)
+  estado        String   @default("activo")
+  fechaCreacion DateTime @default(now()) @map("fecha_creacion")
 
-  ventaItems      VentaItem[]
-  sucursales      Sucursal[]
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  ventaItems VentaItem[]
+  sucursales Sucursal[]
 
-  @@index([codigo])
-  @@index([nombre])
+  @@unique([tenantId, codigo])
+  @@index([tenantId, nombre])
   @@map("productos")
 }
 
 model Venta {
-  id              Int       @id @default(autoincrement())
-  sucursalId      Int?      @map("sucursal_id")
-  clienteId       Int?      @map("cliente_id")
-  tipoPago        String    @default("efectivo") @map("tipo_pago") // 'efectivo', 'cuenta_corriente', 'tarjeta', 'transferencia'
-  estadoPago      String    @default("pagado") @map("estado_pago") // 'pagado', 'pendiente'
-  metodoPago      String?   @map("metodo_pago")
-  fechaVenta      DateTime  @default(now()) @map("fecha_venta")
-  total           Decimal   @db.Decimal(10, 2)
-  userId          String?   @map("user_id")
-  notas           String?   @db.Text
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  sucursalId Int?     @map("sucursal_id")
+  clienteId  Int?     @map("cliente_id")
+  tipoPago   String   @default("efectivo") @map("tipo_pago") // 'efectivo', 'cuenta_corriente', 'tarjeta', 'transferencia'
+  estadoPago String   @default("pagado") @map("estado_pago") // 'pagado', 'pendiente'
+  metodoPago String?  @map("metodo_pago")
+  fechaVenta DateTime @default(now()) @map("fecha_venta")
+  total      Decimal  @db.Decimal(10, 2)
+  userId     String?  @map("user_id")
+  notas      String?  @db.Text
 
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
-  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
-  user            User?     @relation(fields: [userId], references: [id])
-  items           VentaItem[]
+  tenant   Tenant      @relation(fields: [tenantId], references: [id])
+  sucursal Sucursal?   @relation(fields: [sucursalId], references: [id])
+  cliente  Cliente?    @relation(fields: [clienteId], references: [id])
+  user     User?       @relation(fields: [userId], references: [id])
+  items    VentaItem[]
 
   @@index([fechaVenta])
   @@index([sucursalId])
   @@index([clienteId])
+  @@index([tenantId, fechaVenta])
   @@map("ventas")
 }
 
 model VentaItem {
-  id              Int       @id @default(autoincrement())
-  ventaId         Int       @map("venta_id")
-  productoId      Int       @map("producto_id")
-  cantidad        Int
-  precioUnitario  Decimal   @map("precio_unitario") @db.Decimal(10, 2)
-  subtotal        Decimal   @db.Decimal(10, 2)
+  id             Int     @id @default(autoincrement())
+  ventaId        Int     @map("venta_id")
+  productoId     Int     @map("producto_id")
+  cantidad       Int
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
 
-  venta           Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  producto        Producto  @relation(fields: [productoId], references: [id])
+  venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
 
   @@index([ventaId])
   @@map("venta_items")
@@ -220,6 +343,7 @@ model VentaItem {
 
 model Ingreso {
   id              Int       @id @default(autoincrement())
+  tenantId        Int       @map("tenant_id")
   clienteId       Int       @map("cliente_id")
   sucursalId      Int?      @map("sucursal_id")
   documento       String    @db.VarChar(20)
@@ -227,55 +351,61 @@ model Ingreso {
   horaSalida      DateTime? @map("hora_salida")
   duracionMinutos Int?      @map("duracion_minutos")
   diasVencido     Int?      @map("dias_vencido")
-  estado          String    
+  estado          String
   motivo          String?   @db.VarChar(255)
 
-  cliente         Cliente   @relation(fields: [clienteId], references: [id])
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  cliente  Cliente   @relation(fields: [clienteId], references: [id])
+  sucursal Sucursal? @relation(fields: [sucursalId], references: [id])
 
   @@index([fechaHora])
   @@index([horaSalida])
   @@index([clienteId])
   @@index([sucursalId])
+  @@index([tenantId, fechaHora])
   @@map("ingresos")
 }
 
 model UsuarioCliente {
   id                  Int       @id @default(autoincrement())
+  tenantId            Int       @map("tenant_id")
   clienteId           Int       @unique @map("cliente_id")
-  usuario             String    @unique @db.VarChar(20) 
+  usuario             String    @db.VarChar(20)
   password            String    @db.VarChar(255)
   debeCambiarPassword Boolean   @default(true) @map("debe_cambiar_password")
   ultimoAcceso        DateTime? @map("ultimo_acceso")
 
-  cliente             Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, usuario])
+  @@index([tenantId])
   @@map("usuarios_clientes")
 }
 
 model CuentaCorriente {
-  id             Int       @id @default(autoincrement())
-  clienteId      Int       @unique @map("cliente_id")
-  saldo          Decimal   @default(0) @db.Decimal(10, 2)
-  limiteCredito  Decimal   @default(0) @map("limite_credito") @db.Decimal(10, 2)
+  id            Int     @id @default(autoincrement())
+  clienteId     Int     @unique @map("cliente_id")
+  saldo         Decimal @default(0) @db.Decimal(10, 2)
+  limiteCredito Decimal @default(0) @map("limite_credito") @db.Decimal(10, 2)
 
-  cliente        Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  movimientos    CuentaMovimiento[]
+  cliente     Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  movimientos CuentaMovimiento[]
 
   @@map("cuenta_corriente")
 }
 
 model CuentaMovimiento {
-  id             Int       @id @default(autoincrement())
-  cuentaId       Int       @map("cuenta_id")
-  tipo           String    // 'cargo', 'pago'
-  monto          Decimal   @db.Decimal(10, 2)
-  concepto       String?   @db.VarChar(255)
-  fecha          DateTime  @default(now())
-  usuarioAdminId String?   @map("usuario_admin_id")
+  id             Int      @id @default(autoincrement())
+  cuentaId       Int      @map("cuenta_id")
+  tipo           String // 'cargo', 'pago'
+  monto          Decimal  @db.Decimal(10, 2)
+  concepto       String?  @db.VarChar(255)
+  fecha          DateTime @default(now())
+  usuarioAdminId String?  @map("usuario_admin_id")
 
-  cuenta         CuentaCorriente @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
-  usuarioAdmin   User?           @relation(fields: [usuarioAdminId], references: [id])
+  cuenta       CuentaCorriente @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  usuarioAdmin User?           @relation(fields: [usuarioAdminId], references: [id])
 
   @@index([cuentaId])
   @@index([fecha])
@@ -283,21 +413,675 @@ model CuentaMovimiento {
 }
 
 model ConfiguracionHorario {
-  id              Int       @id @default(autoincrement())
-  sucursalId      Int?      @map("sucursal_id")
-  diaSemana       Int       @map("dia_semana") // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
-  tipoApertura    String    @default("completo") @map("tipo_apertura") // 'cerrado', 'completo', 'mañana', 'tarde', 'doble'
-  horaApertura1   String?   @map("hora_apertura_1") @db.VarChar(10) // "06:00"
-  horaCierre1     String?   @map("hora_cierre_1") @db.VarChar(10) // "22:00"
-  horaApertura2   String?   @map("hora_apertura_2") @db.VarChar(10)
-  horaCierre2     String?   @map("hora_cierre_2") @db.VarChar(10)
-  capacidadMaxima Int?      @default(50) @map("capacidad_maxima")
-  activo          Boolean   @default(true)
+  id              Int     @id @default(autoincrement())
+  sucursalId      Int?    @map("sucursal_id")
+  diaSemana       Int     @map("dia_semana") // 0=Domingo, 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+  tipoApertura    String  @default("completo") @map("tipo_apertura") // 'cerrado', 'completo', 'mañana', 'tarde', 'doble'
+  horaApertura1   String? @map("hora_apertura_1") @db.VarChar(10) // "06:00"
+  horaCierre1     String? @map("hora_cierre_1") @db.VarChar(10) // "22:00"
+  horaApertura2   String? @map("hora_apertura_2") @db.VarChar(10)
+  horaCierre2     String? @map("hora_cierre_2") @db.VarChar(10)
+  capacidadMaxima Int?    @default(50) @map("capacidad_maxima")
+  activo          Boolean @default(true)
 
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+  sucursal Sucursal? @relation(fields: [sucursalId], references: [id])
 
   @@unique([sucursalId, diaSemana])
   @@index([sucursalId])
   @@map("configuracion_horarios")
+}
+
+model SesionSocio {
+  id          String   @id @default(cuid())
+  tenantId    Int      @map("tenant_id")
+  clienteId   Int      @map("cliente_id")
+  tokenHash   String   @unique @map("token_hash") @db.VarChar(64)
+  expiraEn    DateTime @map("expira_en")
+  creadoEn    DateTime @default(now()) @map("creado_en")
+  ultimoUsoEn DateTime @default(now()) @map("ultimo_uso_en")
+  userAgent   String?  @map("user_agent") @db.VarChar(255)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clienteId, expiraEn])
+  @@map("sesiones_socios")
+}
+
+model PerfilEntrenador {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int      @map("tenant_id")
+  userId         String   @unique @map("user_id")
+  bio            String?  @db.Text
+  especialidades String[]
+  foto           String?  @db.Text
+  horarios       Json?
+  estado         String   @default("activo")
+  creadoEn       DateTime @default(now()) @map("creado_en")
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+  user       User               @relation(fields: [userId], references: [id])
+  sucursales Sucursal[]
+  socios     Cliente[]
+  objetivos  ObjetivoSocio[]
+  rutinas    Rutina[]
+  mediciones MedicionCorporal[]
+  clases     Clase[]
+
+  @@index([tenantId, estado])
+  @@map("perfiles_entrenador")
+}
+
+model ObjetivoSocio {
+  id            Int       @id @default(autoincrement())
+  tenantId      Int       @map("tenant_id")
+  clienteId     Int       @map("cliente_id")
+  entrenadorId  Int?      @map("entrenador_id")
+  tipo          String    @db.VarChar(80)
+  principal     Boolean   @default(false)
+  fechaInicio   DateTime  @default(now()) @map("fecha_inicio") @db.Date
+  observaciones String?   @db.Text
+  activo        Boolean   @default(true)
+  estado        String    @default("activo")
+  fechaFin      DateTime? @map("fecha_fin") @db.Date
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en")
+
+  cliente    Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  entrenador PerfilEntrenador? @relation(fields: [entrenadorId], references: [id])
+
+  @@index([tenantId, clienteId, estado])
+  @@map("objetivos_socios")
+}
+
+model Ejercicio {
+  id            Int      @id @default(autoincrement())
+  tenantId      Int      @map("tenant_id")
+  nombre        String   @db.VarChar(120)
+  descripcion   String?  @db.Text
+  grupoMuscular String   @map("grupo_muscular") @db.VarChar(60)
+  categoria     String?  @db.VarChar(60)
+  equipamiento  String?  @db.VarChar(100)
+  dificultad    String?  @db.VarChar(40)
+  instrucciones String?  @db.Text
+  videoUrl      String?  @map("video_url") @db.Text
+  imagenUrl     String?  @map("imagen_url") @db.Text
+  observaciones String?  @db.Text
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  rutinas  RutinaEjercicio[]
+  sesiones EjercicioSesion[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId, grupoMuscular, activo])
+  @@map("ejercicios")
+}
+
+model Rutina {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int      @map("tenant_id")
+  nombre          String   @db.VarChar(140)
+  descripcion     String?  @db.Text
+  objetivo        String?  @db.VarChar(100)
+  nivel           String?  @db.VarChar(40)
+  duracionMinutos Int?     @map("duracion_minutos")
+  diasCantidad    Int?     @map("dias_cantidad")
+  entrenadorId    Int?     @map("entrenador_id")
+  recomendaciones String?  @db.Text
+  estado          String   @default("activo")
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
+  entrenador   PerfilEntrenador?         @relation(fields: [entrenadorId], references: [id])
+  ejercicios   RutinaEjercicio[]
+  fases        FasePlan[]
+  asignaciones AsignacionEntrenamiento[]
+  sesiones     SesionEntrenamiento[]
+
+  @@index([tenantId, estado, nombre])
+  @@map("rutinas")
+}
+
+model RutinaEjercicio {
+  id               Int      @id @default(autoincrement())
+  rutinaId         Int      @map("rutina_id")
+  ejercicioId      Int      @map("ejercicio_id")
+  dia              Int      @default(1)
+  orden            Int
+  series           Int?
+  repeticiones     String?  @db.VarChar(30)
+  pesoSugerido     Decimal? @map("peso_sugerido") @db.Decimal(8, 2)
+  descansoSegundos Int?     @map("descanso_segundos")
+  tiempoSegundos   Int?     @map("tiempo_segundos")
+  observaciones    String?  @db.Text
+
+  rutina    Rutina    @relation(fields: [rutinaId], references: [id], onDelete: Cascade)
+  ejercicio Ejercicio @relation(fields: [ejercicioId], references: [id])
+
+  @@unique([rutinaId, dia, orden])
+  @@index([ejercicioId])
+  @@map("rutina_ejercicios")
+}
+
+model PlanEntrenamiento {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int      @map("tenant_id")
+  nombre          String   @db.VarChar(140)
+  descripcion     String?  @db.Text
+  objetivo        String?  @db.VarChar(100)
+  duracionSemanas Int      @map("duracion_semanas")
+  estado          String   @default("activo")
+  creadoEn        DateTime @default(now()) @map("creado_en")
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
+  fases        FasePlan[]
+  asignaciones AsignacionEntrenamiento[]
+
+  @@index([tenantId, estado])
+  @@map("planes_entrenamiento")
+}
+
+model FasePlan {
+  id           Int @id @default(autoincrement())
+  planId       Int @map("plan_id")
+  rutinaId     Int @map("rutina_id")
+  orden        Int
+  semanaInicio Int @map("semana_inicio")
+  semanaFin    Int @map("semana_fin")
+
+  plan   PlanEntrenamiento @relation(fields: [planId], references: [id], onDelete: Cascade)
+  rutina Rutina            @relation(fields: [rutinaId], references: [id])
+
+  @@unique([planId, orden])
+  @@map("fases_plan")
+}
+
+model AsignacionEntrenamiento {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int       @map("tenant_id")
+  clienteId   Int       @map("cliente_id")
+  planId      Int?      @map("plan_id")
+  rutinaId    Int?      @map("rutina_id")
+  fechaInicio DateTime  @map("fecha_inicio") @db.Date
+  fechaFin    DateTime? @map("fecha_fin") @db.Date
+  estado      String    @default("activa")
+  notas       String?   @db.Text
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id])
+  cliente  Cliente               @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  plan     PlanEntrenamiento?    @relation(fields: [planId], references: [id])
+  rutina   Rutina?               @relation(fields: [rutinaId], references: [id])
+  sesiones SesionEntrenamiento[]
+
+  @@index([tenantId, clienteId, estado])
+  @@map("asignaciones_entrenamiento")
+}
+
+model SesionEntrenamiento {
+  id              Int       @id @default(autoincrement())
+  tenantId        Int       @map("tenant_id")
+  clienteId       Int       @map("cliente_id")
+  asignacionId    Int?      @map("asignacion_id")
+  rutinaId        Int?      @map("rutina_id")
+  diaRutina       Int?      @map("dia_rutina")
+  iniciadaEn      DateTime  @default(now()) @map("iniciada_en")
+  finalizadaEn    DateTime? @map("finalizada_en")
+  duracionMinutos Int?      @map("duracion_minutos")
+  cumplimiento    Decimal?  @db.Decimal(5, 2)
+  comentario      String?   @db.Text
+  estado          String    @default("en_curso")
+
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id])
+  cliente    Cliente                  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  asignacion AsignacionEntrenamiento? @relation(fields: [asignacionId], references: [id])
+  rutina     Rutina?                  @relation(fields: [rutinaId], references: [id])
+  ejercicios EjercicioSesion[]
+
+  @@index([tenantId, clienteId, iniciadaEn])
+  @@map("sesiones_entrenamiento")
+}
+
+model EjercicioSesion {
+  id                   Int      @id @default(autoincrement())
+  sesionId             Int      @map("sesion_id")
+  ejercicioId          Int      @map("ejercicio_id")
+  orden                Int
+  seriesObjetivo       Int?     @map("series_objetivo")
+  repeticionesObjetivo String?  @map("repeticiones_objetivo") @db.VarChar(30)
+  pesoSugerido         Decimal? @map("peso_sugerido") @db.Decimal(8, 2)
+  descansoSegundos     Int?     @map("descanso_segundos")
+  tiempoSegundos       Int?     @map("tiempo_segundos")
+  observaciones        String?  @db.Text
+
+  sesion    SesionEntrenamiento  @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  ejercicio Ejercicio            @relation(fields: [ejercicioId], references: [id])
+  series    SerieEntrenamiento[]
+
+  @@unique([sesionId, orden])
+  @@map("ejercicios_sesion")
+}
+
+model SerieEntrenamiento {
+  id                Int      @id @default(autoincrement())
+  ejercicioSesionId Int      @map("ejercicio_sesion_id")
+  numero            Int
+  peso              Decimal? @db.Decimal(8, 2)
+  repeticiones      Int?
+  esfuerzoPercibido Int?     @map("esfuerzo_percibido")
+  completada        Boolean  @default(false)
+  comentario        String?  @db.VarChar(255)
+
+  ejercicioSesion EjercicioSesion @relation(fields: [ejercicioSesionId], references: [id], onDelete: Cascade)
+
+  @@unique([ejercicioSesionId, numero])
+  @@map("series_entrenamiento")
+}
+
+model MedicionCorporal {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int      @map("tenant_id")
+  clienteId       Int      @map("cliente_id")
+  entrenadorId    Int?     @map("entrenador_id")
+  fecha           DateTime @default(now()) @db.Date
+  peso            Decimal? @db.Decimal(6, 2)
+  altura          Decimal? @db.Decimal(5, 2)
+  imc             Decimal? @db.Decimal(5, 2)
+  grasa           Decimal? @db.Decimal(5, 2)
+  masaMuscular    Decimal? @map("masa_muscular") @db.Decimal(5, 2)
+  cintura         Decimal? @db.Decimal(6, 2)
+  pecho           Decimal? @db.Decimal(6, 2)
+  brazoIzquierdo  Decimal? @map("brazo_izquierdo") @db.Decimal(6, 2)
+  brazoDerecho    Decimal? @map("brazo_derecho") @db.Decimal(6, 2)
+  piernaIzquierda Decimal? @map("pierna_izquierda") @db.Decimal(6, 2)
+  piernaDerecha   Decimal? @map("pierna_derecha") @db.Decimal(6, 2)
+  cadera          Decimal? @db.Decimal(6, 2)
+  extras          Json?
+  observaciones   String?  @db.Text
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  cliente    Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  entrenador PerfilEntrenador? @relation(fields: [entrenadorId], references: [id])
+
+  @@index([tenantId, clienteId, fecha])
+  @@map("mediciones_corporales")
+}
+
+model FotoProgreso {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int      @map("tenant_id")
+  clienteId Int      @map("cliente_id")
+  fecha     DateTime @default(now()) @db.Date
+  tipo      String   @db.VarChar(20)
+  objectKey String   @map("object_key") @db.Text
+  mimeType  String   @map("mime_type") @db.VarChar(80)
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clienteId, fecha])
+  @@map("fotos_progreso")
+}
+
+model TipoClase {
+  id          Int     @id @default(autoincrement())
+  tenantId    Int     @map("tenant_id")
+  nombre      String  @db.VarChar(100)
+  descripcion String? @db.Text
+  color       String? @db.VarChar(20)
+  activo      Boolean @default(true)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  clases Clase[]
+
+  @@unique([tenantId, nombre])
+  @@map("tipos_clase")
+}
+
+model Clase {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int      @map("tenant_id")
+  tipoClaseId     Int      @map("tipo_clase_id")
+  entrenadorId    Int?     @map("entrenador_id")
+  sucursalId      Int      @map("sucursal_id")
+  sala            String?  @db.VarChar(80)
+  inicio          DateTime
+  duracionMinutos Int      @map("duracion_minutos")
+  cupoMaximo      Int      @map("cupo_maximo")
+  estado          String   @default("programada")
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  tipoClase  TipoClase         @relation(fields: [tipoClaseId], references: [id])
+  entrenador PerfilEntrenador? @relation(fields: [entrenadorId], references: [id])
+  sucursal   Sucursal          @relation(fields: [sucursalId], references: [id])
+  reservas   ReservaClase[]
+
+  @@index([tenantId, sucursalId, inicio])
+  @@map("clases")
+}
+
+model ReservaClase {
+  id             Int       @id @default(autoincrement())
+  tenantId       Int       @map("tenant_id")
+  claseId        Int       @map("clase_id")
+  clienteId      Int       @map("cliente_id")
+  estado         String    @default("confirmada")
+  posicionEspera Int?      @map("posicion_espera")
+  creadaEn       DateTime  @default(now()) @map("creada_en")
+  canceladaEn    DateTime? @map("cancelada_en")
+  asistenciaEn   DateTime? @map("asistencia_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  clase   Clase   @relation(fields: [claseId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([claseId, clienteId])
+  @@index([tenantId, clienteId, estado])
+  @@map("reservas_clase")
+}
+
+model MovimientoPuntos {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  clienteId  Int      @map("cliente_id")
+  puntos     Int
+  tipo       String   @db.VarChar(50)
+  concepto   String   @db.VarChar(180)
+  referencia String?  @db.VarChar(120)
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clienteId, creadoEn])
+  @@map("movimientos_puntos")
+}
+
+model Premio {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  nombre      String   @db.VarChar(120)
+  descripcion String?  @db.Text
+  puntos      Int
+  stock       Int?
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id])
+  canjes CanjePremio[]
+
+  @@index([tenantId, activo])
+  @@map("premios")
+}
+
+model CanjePremio {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int       @map("tenant_id")
+  clienteId   Int       @map("cliente_id")
+  premioId    Int       @map("premio_id")
+  puntos      Int
+  estado      String    @default("pendiente")
+  creadoEn    DateTime  @default(now()) @map("creado_en")
+  entregadoEn DateTime? @map("entregado_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  premio  Premio  @relation(fields: [premioId], references: [id])
+
+  @@index([tenantId, clienteId, creadoEn])
+  @@map("canjes_premio")
+}
+
+model Beneficio {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int       @map("tenant_id")
+  titulo       String    @db.VarChar(140)
+  descripcion  String    @db.Text
+  comercio     String?   @db.VarChar(120)
+  imagenUrl    String?   @map("imagen_url") @db.Text
+  vigenteDesde DateTime? @map("vigente_desde") @db.Date
+  vigenteHasta DateTime? @map("vigente_hasta") @db.Date
+  condiciones  String?   @db.Text
+  activo       Boolean   @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, activo, vigenteHasta])
+  @@map("beneficios")
+}
+
+model Notificacion {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int       @map("tenant_id")
+  clienteId Int       @map("cliente_id")
+  tipo      String    @db.VarChar(60)
+  titulo    String    @db.VarChar(140)
+  mensaje   String    @db.Text
+  datos     Json?
+  leidaEn   DateTime? @map("leida_en")
+  creadaEn  DateTime  @default(now()) @map("creada_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clienteId, leidaEn, creadaEn])
+  @@map("notificaciones")
+}
+
+model Auditoria {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int?     @map("tenant_id")
+  actorUserId    String?  @map("actor_user_id") @db.VarChar(191)
+  actorClienteId Int?     @map("actor_cliente_id")
+  accion         String   @db.VarChar(100)
+  entidad        String?  @db.VarChar(100)
+  entidadId      String?  @map("entidad_id") @db.VarChar(191)
+  resultado      String   @default("exito") @db.VarChar(30)
+  metadata       Json?
+  ip             String?  @db.VarChar(80)
+  userAgent      String?  @map("user_agent") @db.VarChar(255)
+  creadaEn       DateTime @default(now()) @map("creada_en")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, creadaEn])
+  @@index([actorUserId, creadaEn])
+  @@index([accion, creadaEn])
+  @@map("auditorias")
+}
+
+// --- PLANO DE CONTROL SAAS & SUPERADMIN (DEPLOY V4) ---
+
+model SuperAdmin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique @db.VarChar(120)
+  password  String   @db.VarChar(255)
+  nombre    String   @db.VarChar(100)
+  rol       String   @default("superadmin")
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  @@map("superadmins")
+}
+
+model PlanSaaS {
+  id               Int      @id @default(autoincrement())
+  codigo           String   @unique @db.VarChar(50) // "STARTER", "PRO", "ENTERPRISE"
+  nombre           String   @db.VarChar(100)
+  descripcion      String?  @db.Text
+  precioMensual    Decimal  @map("precio_mensual") @db.Decimal(10, 2)
+  limiteUsuarios   Int      @default(5) @map("limite_usuarios")
+  limiteSucursales Int      @default(1) @map("limite_sucursales")
+  limiteSocios     Int?     @default(500) @map("limite_socios")
+  modulos          Json?
+  activo           Boolean  @default(true)
+  creadoEn         DateTime @default(now()) @map("creado_en")
+  actualizadoEn    DateTime @updatedAt @map("actualizado_en")
+
+  suscripciones SuscripcionSaaS[]
+  tenants       Tenant[]
+
+  @@map("planes_saas")
+}
+
+model SuscripcionSaaS {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int       @map("tenant_id")
+  planId           Int       @map("plan_id")
+  estado           String    @default("activa") // "activa", "prueba", "suspendida", "cancelada"
+  fechaInicio      DateTime  @default(now()) @map("fecha_inicio")
+  fechaVencimiento DateTime  @map("fecha_vencimiento")
+  monto            Decimal   @db.Decimal(10, 2)
+  intervalo        String    @default("mensual")
+  metodoPago       String?   @map("metodo_pago")
+  notas            String?   @db.Text
+  creadaEn         DateTime  @default(now()) @map("creada_en")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan            PlanSaaS         @relation(fields: [planId], references: [id])
+  pagosPlataforma PagoPlataforma[]
+
+  @@index([tenantId, estado])
+  @@map("suscripciones_saas")
+}
+
+model PagoPlataforma {
+  id            Int      @id @default(autoincrement())
+  suscripcionId Int      @map("suscripcion_id")
+  tenantId      Int      @map("tenant_id")
+  monto         Decimal  @db.Decimal(10, 2)
+  metodoPago    String   @map("metodo_pago")
+  referencia    String?  @db.VarChar(100)
+  fechaPago     DateTime @default(now()) @map("fecha_pago")
+  comprobante   String?  @db.Text
+  estado        String   @default("completado")
+
+  suscripcion SuscripcionSaaS @relation(fields: [suscripcionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, fechaPago])
+  @@map("pagos_plataforma")
+}
+
+// --- FASE 8: SEGUIMIENTO COMERCIAL Y RETENCIÓN CRM ---
+
+model SeguimientoCliente {
+  id              Int       @id @default(autoincrement())
+  tenantId        Int       @map("tenant_id")
+  clienteId       Int       @map("cliente_id")
+  usuarioId       String?   @map("usuario_id")
+  tipo            String    @db.VarChar(50) // "whatsapp", "llamada", "email", "nota", "oferta"
+  estado          String    @default("pendiente") // "pendiente", "contactado", "recuperado", "descartado"
+  motivo          String?   @db.VarChar(120) // "inactividad_7d", "inactividad_14d", "vencimiento_proximo", "caida_frecuencia", "manual"
+  resultado       String?   @db.Text
+  proximoContacto DateTime? @map("proximo_contacto")
+  creadoEn        DateTime  @default(now()) @map("creado_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuario User?   @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId, clienteId, creadoEn])
+  @@index([tenantId, estado])
+  @@map("seguimientos_clientes")
+}
+
+// --- FASE 9: FIDELIZACIÓN, REGLAS DE PUNTOS Y DESAFÍOS ---
+
+model ReglaPuntos {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  evento      String   @db.VarChar(60) // "asistencia", "entrenamiento_completo", "racha_3d", "racha_7d", "renovacion_membresia", "cumpleanos"
+  puntos      Int
+  activo      Boolean  @default(true)
+  descripcion String?  @db.VarChar(200)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, evento])
+  @@map("reglas_puntos")
+}
+
+model Desafio {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int       @map("tenant_id")
+  titulo           String    @db.VarChar(140)
+  descripcion      String    @db.Text
+  tipo             String    @db.VarChar(50) // "asistencias_semana", "entrenamientos_mes", "visitas_mes", "peso_total"
+  meta             Int       // Cantidad objetivo
+  puntosRecompensa Int       @map("puntos_recompensa")
+  fechaInicio      DateTime? @map("fecha_inicio") @db.Date
+  fechaFin         DateTime? @map("fecha_fin") @db.Date
+  activo           Boolean   @default(true)
+  creadoEn         DateTime  @default(now()) @map("creado_en")
+
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
+  participaciones ParticipacionDesafio[]
+
+  @@index([tenantId, activo])
+  @@map("desafios")
+}
+
+model ParticipacionDesafio {
+  id              Int       @id @default(autoincrement())
+  tenantId        Int       @map("tenant_id")
+  desafioId       Int       @map("desafio_id")
+  clienteId       Int       @map("cliente_id")
+  progreso        Int       @default(0)
+  completado      Boolean   @default(false)
+  completadoEn    DateTime? @map("completado_en")
+  puntosOtorgados Boolean   @default(false) @map("puntos_otorgados")
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  desafio Desafio @relation(fields: [desafioId], references: [id], onDelete: Cascade)
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([desafioId, clienteId])
+  @@index([tenantId, clienteId])
+  @@map("participaciones_desafios")
+}
+
+// --- FASE 10: NOTIFICACIONES, WEB PUSH Y TRAZABILIDAD ---
+
+model WebPushSubscription {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int?     @map("tenant_id")
+  clienteId Int?     @map("cliente_id")
+  userId    String?  @map("user_id")
+  endpoint  String   @unique @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, clienteId])
+  @@index([userId])
+  @@map("web_push_subscriptions")
+}
+
+model RegistroNotificacion {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  clienteId    Int?     @map("cliente_id")
+  canal        String   @db.VarChar(30) // "in_app", "push", "whatsapp", "email"
+  tipo         String   @db.VarChar(60)
+  destinatario String?  @db.VarChar(150)
+  titulo       String   @db.VarChar(200)
+  mensaje      String   @db.Text
+  estado       String   @default("enviado") // "enviado", "fallido", "leido", "reintentado"
+  error        String?  @db.Text
+  reintentos   Int      @default(0)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  cliente Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, canal, estado])
+  @@index([clienteId, creadoEn])
+  @@map("registro_notificaciones")
 }
 

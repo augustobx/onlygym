@@ -38,13 +38,17 @@ export async function POST(req: Request) {
       );
     }
 
+    const branch = await prisma.sucursal.findFirst({ where: { id: sucursalId, estado: "activo", tenant: { estado: "activo" } }, select: { id: true, tenantId: true } });
+    if (!branch) return NextResponse.json({ registrado: false, error: "Sucursal inválida" }, { status: 404 });
+
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const ingresoAbierto = await prisma.ingreso.findFirst({
       where: {
+        tenantId: branch.tenantId,
         documento,
-        sucursalId,
+        sucursalId: branch.id,
         fechaHora: { gte: hoy },
         horaSalida: null,
       },

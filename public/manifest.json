@@ -1,6 +1,6 @@
 {
-  "name": "GymLink - Gestión Integral & Portal del Socio",
-  "short_name": "GymLink",
+  "name": "OnlyGym - Gestión Integral & Portal del Socio",
+  "short_name": "OnlyGym",
   "description": "Sistema de gestión integral para gimnasios y carnet digital de socios",
   "start_url": "/",
   "display": "standalone",

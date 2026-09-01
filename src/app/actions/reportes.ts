@@ -2,21 +2,25 @@
 
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
 
 export async function getReportes(desde: string, hasta: string, sucursalId?: number) {
   try {
+    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
+    await requireTenantModule(context.tenantId, "reportes");
     const fechaDesde = new Date(desde);
     fechaDesde.setHours(0, 0, 0, 0);
     const fechaHasta = new Date(hasta);
     fechaHasta.setHours(23, 59, 59, 999);
 
     const whereDate = { gte: fechaDesde, lte: fechaHasta };
-    const whereSucursal = sucursalId ? { sucursalId } : {};
+    const whereSucursal = sucursalId ? { sucursalId: context.branchId } : {};
 
     // 1. Estadísticas Globales de Clientes
-    const totalClientes = await prisma.cliente.count({ where: { estado: "activo" } });
+    const totalClientes = await prisma.cliente.count({ where: { tenantId: context.tenantId, estado: "activo" } });
     const clientesActivos = await prisma.cliente.count({
       where: {
+        tenantId: context.tenantId,
         estado: "activo",
         pagos: {
           some: {
@@ -32,7 +36,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       _sum: { monto: true },
       _count: true,
       _avg: { monto: true },
-      where: { fechaPago: whereDate, ...whereSucursal },
+      where: { tenantId: context.tenantId, fechaPago: whereDate, ...whereSucursal },
     });
 
     // Desglose de pagos por método
@@ -40,7 +44,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       by: ["metodoPago"],
       _sum: { monto: true },
       _count: true,
-      where: { fechaPago: whereDate, ...whereSucursal },
+      where: { tenantId: context.tenantId, fechaPago: whereDate, ...whereSucursal },
     });
 
     // 3. Ventas de Productos Kiosco / Cantina
@@ -48,7 +52,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       _sum: { total: true },
       _count: true,
       _avg: { total: true },
-      where: { fechaVenta: whereDate, ...whereSucursal },
+      where: { tenantId: context.tenantId, fechaVenta: whereDate, ...whereSucursal },
     });
 
     // Desglose de ventas kiosco por tipo de pago
@@ -56,7 +60,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       by: ["tipoPago"],
       _sum: { total: true },
       _count: true,
-      where: { fechaVenta: whereDate, ...whereSucursal },
+      where: { tenantId: context.tenantId, fechaVenta: whereDate, ...whereSucursal },
     });
 
     // 4. Ranking Top 10 Productos Más Vendidos
@@ -66,6 +70,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       _count: true,
       where: {
         venta: {
+          tenantId: context.tenantId,
           fechaVenta: whereDate,
           ...whereSucursal,
         },
@@ -76,7 +81,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
 
     const productoIds = topProductosRaw.map(p => p.productoId);
     const productos = await prisma.producto.findMany({
-      where: { id: { in: productoIds } },
+      where: { tenantId: context.tenantId, id: { in: productoIds } },
     });
     const productoMap = new Map(productos.map(p => [p.id, p]));
 
@@ -98,20 +103,21 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
       by: ["membresiaId"],
       _count: true,
       _sum: { monto: true },
-      where: { fechaPago: whereDate, ...whereSucursal },
+      where: { tenantId: context.tenantId, fechaPago: whereDate, ...whereSucursal },
       orderBy: { _count: { membresiaId: "desc" } },
       take: 10,
     });
 
     const membresiaIds = membresiasVendidas.map(m => m.membresiaId);
     const membresias = await prisma.membresia.findMany({
-      where: { id: { in: membresiaIds } },
+      where: { tenantId: context.tenantId, id: { in: membresiaIds } },
     });
     const membresiaMap = new Map(membresias.map(m => [m.id, m.nombre]));
 
     // 6. Análisis de Horarios Pico vs Valle (Distribución Horaria)
     const todosIngresos = await prisma.ingreso.findMany({
       where: {
+        tenantId: context.tenantId,
         fechaHora: whereDate,
         ...whereSucursal,
       },
@@ -155,6 +161,7 @@ export async function getReportes(desde: string, hasta: string, sucursalId?: num
     // 7. Últimos Accesos Denegados
     const ultimosDenegados = await prisma.ingreso.findMany({
       where: {
+        tenantId: context.tenantId,
         fechaHora: whereDate,
         estado: { notIn: ["permitido", "ACTIVO"] },
         ...whereSucursal,

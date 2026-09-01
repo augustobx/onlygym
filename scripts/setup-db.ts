@@ -1,15 +1,22 @@
 import { auth } from "../src/lib/auth";
 import { prisma } from "../src/lib/prisma";
+import { RolTenant } from "@prisma/client";
 
 async function main() {
   console.log("Iniciando inicialización de base de datos y usuario admin...");
 
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: "onlygym-demo" },
+    update: { estado: "activo" },
+    create: { nombre: "OnlyGym Demo", slug: "onlygym-demo", estado: "activo" },
+  });
+
   // 1. Crear Sede Principal si no existe
   const sucursal = await prisma.sucursal.upsert({
-    where: { id: 1 },
+    where: { tenantId_nombre: { tenantId: tenant.id, nombre: "Sede Principal" } },
     update: {},
     create: {
-      id: 1,
+      tenantId: tenant.id,
       nombre: "Sede Principal",
       direccion: "Av. San Martín 123",
       estado: "activo",
@@ -22,7 +29,7 @@ async function main() {
     where: {
       OR: [
         { username: "admin" },
-        { email: "admin@gymlink.local" }
+        { email: "admin@onlygym.local" }
       ]
     }
   });
@@ -32,7 +39,7 @@ async function main() {
   const res = await auth.api.signUpEmail({
     body: {
       name: "Administrador General",
-      email: "admin@gymlink.local",
+      email: "admin@onlygym.local",
       username: "admin",
       password: "admin123",
     } as any,
@@ -53,9 +60,14 @@ async function main() {
         nivel: "admin",
         estado: "activo",
         sucursales: {
-          connect: [{ id: 1 }]
+          connect: [{ id: sucursal.id }]
         }
       }
+    });
+    await prisma.tenantUsuario.upsert({
+      where: { tenantId_userId: { tenantId: tenant.id, userId: adminUser.id } },
+      update: { rol: RolTenant.OWNER, estado: "activo" },
+      create: { tenantId: tenant.id, userId: adminUser.id, rol: RolTenant.OWNER },
     });
     console.log("✅ Permisos de administrador y Sede 1 vinculados con éxito.");
   }

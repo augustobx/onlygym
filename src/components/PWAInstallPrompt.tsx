@@ -10,7 +10,7 @@ interface PWAInstallPromptProps {
 
 export default function PWAInstallPrompt({
   variant = "button",
-  appName = "GymLink App",
+  appName = "OnlyGym",
 }: PWAInstallPromptProps) {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);

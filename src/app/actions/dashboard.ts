@@ -2,9 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext } from "@/lib/tenant-context";
 
 export async function getDashboardStats(sucursalId?: number) {
   try {
+    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
+    const tenantId = context.tenantId;
+    const branch = context.branchId ? { sucursalId: context.branchId } : {};
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
@@ -15,12 +19,13 @@ export async function getDashboardStats(sucursalId?: number) {
 
     // Total clientes activos
     const totalClientes = await prisma.cliente.count({
-      where: { estado: "activo" }
+      where: { tenantId, estado: "activo" }
     });
 
     // Clientes al día (con pago vigente)
     const clientesAlDia = await prisma.cliente.count({
       where: {
+        tenantId,
         estado: "activo",
         pagos: {
           some: {
@@ -34,19 +39,21 @@ export async function getDashboardStats(sucursalId?: number) {
     // Ingresos hoy (accesos al gym)
     const ingresosHoy = await prisma.ingreso.count({
       where: {
+        tenantId,
         fechaHora: { gte: hoy },
         estado: { in: ["permitido", "ACTIVO"] },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
 
     // Personas activas adentro en tiempo real
     const personasAdentro = await prisma.ingreso.count({
       where: {
+        tenantId,
         fechaHora: { gte: hoy },
         estado: { in: ["permitido", "ACTIVO"] },
         horaSalida: null,
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
 
@@ -55,8 +62,9 @@ export async function getDashboardStats(sucursalId?: number) {
       _sum: { monto: true },
       _count: true,
       where: {
+        tenantId,
         fechaPago: { gte: hoy },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
 
@@ -70,8 +78,9 @@ export async function getDashboardStats(sucursalId?: number) {
       _sum: { total: true },
       _count: true,
       where: {
+        tenantId,
         fechaVenta: { gte: hoy },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
 
@@ -83,15 +92,17 @@ export async function getDashboardStats(sucursalId?: number) {
     const pagosMesResult = await prisma.pago.aggregate({
       _sum: { monto: true },
       where: {
+        tenantId,
         fechaPago: { gte: primerDiaMes },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
     const ventasMesResult = await prisma.venta.aggregate({
       _sum: { total: true },
       where: {
+        tenantId,
         fechaVenta: { gte: primerDiaMes },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       }
     });
 
@@ -100,27 +111,23 @@ export async function getDashboardStats(sucursalId?: number) {
     // Total de deuda acumulada en Cuentas Corrientes
     const cuentasResult = await prisma.cuentaCorriente.aggregate({
       _sum: { saldo: true },
+      where: { cliente: { tenantId } },
     });
     const totalDeuda = Number(cuentasResult._sum.saldo) || 0;
 
     // Productos bajo stock
     const productosBajoStock = await prisma.producto.count({
       where: {
-        estado: "activo",
-        stock: { lte: prisma.producto.fields.stockMinimo }
+        tenantId,
+        stock: { lte: 5 },
+        estado: "activo"
       }
-    }).catch(() => {
-      return prisma.producto.count({
-        where: {
-          estado: "activo",
-          stock: { lte: 5 }
-        }
-      });
     });
 
-    // Membresías por vencer en 7 días
+    // Membresías a vencer en 7 días
     const membresiasVencer = await prisma.cliente.count({
       where: {
+        tenantId,
         estado: "activo",
         pagos: {
           some: {
@@ -134,7 +141,8 @@ export async function getDashboardStats(sucursalId?: number) {
     // Últimos 5 pagos
     const ultimosPagos = await prisma.pago.findMany({
       where: {
-        ...(sucursalId ? { sucursalId } : {})
+        tenantId,
+        ...branch
       },
       include: {
         cliente: true,
@@ -147,12 +155,53 @@ export async function getDashboardStats(sucursalId?: number) {
     // Últimos 5 ingresos hoy
     const ultimosIngresos = await prisma.ingreso.findMany({
       where: {
+        tenantId,
         fechaHora: { gte: hoy },
-        ...(sucursalId ? { sucursalId } : {})
+        ...branch
       },
       include: { cliente: true },
       orderBy: { fechaHora: "desc" },
       take: 5
+    });
+
+    // Clases y reservas de hoy
+    const finHoy = new Date(hoy);
+    finHoy.setDate(finHoy.getDate() + 1);
+
+    const clasesHoy = await prisma.clase.findMany({
+      where: {
+        tenantId,
+        inicio: { gte: hoy, lt: finHoy },
+        estado: "programada",
+        ...branch,
+      },
+      include: {
+        tipoClase: true,
+        entrenador: { include: { user: { select: { name: true } } } },
+        sucursal: true,
+        _count: { select: { reservas: { where: { estado: { in: ["confirmada", "asistio"] } } } } },
+      },
+      orderBy: { inicio: "asc" },
+    });
+
+    // Conteo de socios en riesgo (7+ días inactivos con membresía activa)
+    const hace7dias = new Date(hoy.getTime() - 7 * 86400000);
+    const hace14dias = new Date(hoy.getTime() - 14 * 86400000);
+
+    const sociosInactivos7d = await prisma.cliente.count({
+      where: {
+        tenantId,
+        estado: "activo",
+        OR: [{ ingresos: { none: {} } }, { ingresos: { none: { fechaHora: { gte: hace7dias } } } }],
+      },
+    });
+
+    const sociosInactivos14d = await prisma.cliente.count({
+      where: {
+        tenantId,
+        estado: "activo",
+        OR: [{ ingresos: { none: {} } }, { ingresos: { none: { fechaHora: { gte: hace14dias } } } }],
+      },
     });
 
     return {
@@ -173,6 +222,18 @@ export async function getDashboardStats(sucursalId?: number) {
         totalDeuda,
         productosBajoStock,
         membresiasVencer,
+        sociosInactivos7d,
+        sociosInactivos14d,
+        clasesHoy: clasesHoy.map((c: any) => ({
+          id: c.id,
+          nombre: c.tipoClase?.nombre || "Clase",
+          inicio: c.inicio.toISOString(),
+          duracionMinutos: c.duracionMinutos,
+          cupoMaximo: c.cupoMaximo,
+          reservados: c._count?.reservas || 0,
+          sucursalNombre: c.sucursal?.nombre || "Sede",
+          profesor: c.entrenador?.user?.name || "Equipo OnlyGym",
+        })),
         totalRecaudacionHoy: ventasHoy + ventasProductosHoy,
         ultimosPagos: ultimosPagos.map(p => ({
           id: p.id,

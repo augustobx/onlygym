@@ -22,6 +22,7 @@ export default function NuevoClientePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
   
   const [sucursales, setSucursales] = useState<any[]>([]);
   const [selectedSucursales, setSelectedSucursales] = useState<number[]>([]);
@@ -95,12 +96,14 @@ export default function NuevoClientePage() {
       setError(res.error || "Ocurrió un error inesperado al dar de alta al socio.");
       setLoading(false);
     } else {
-      router.push("/dashboard/clientes");
+      setTemporaryPassword(res.temporaryPassword || null);
+      setLoading(false);
     }
   }
 
   return (
     <div className="space-y-5 font-sans max-w-4xl mx-auto">
+      {temporaryPassword && <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 text-emerald-950"><p className="font-black">Socio creado correctamente</p><p className="mt-2 text-sm">Contraseña temporal: <code className="rounded bg-white px-2 py-1 font-black">{temporaryPassword}</code></p><p className="mt-2 text-xs">Copiala ahora y entregásela al socio por un canal seguro. Deberá cambiarla al ingresar.</p><button onClick={() => router.push("/dashboard/clientes")} className="mt-4 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white">Volver a socios</button></div>}
       
       {/* Header */}
       <div className="flex items-center justify-between bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">

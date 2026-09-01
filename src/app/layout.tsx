@@ -12,13 +12,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "GymLink Pro - Sistema Integral de Gestión & App de Socios",
+  title: "OnlyGym - El sistema operativo de tu gimnasio",
   description: "Plataforma profesional para gimnasios, control de acceso, POS cantina y portal digital de socios",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GymLink Pro",
+    title: "OnlyGym",
   },
 };
 

@@ -8,7 +8,7 @@ export default function ServiceWorkerRegister() {
       navigator.serviceWorker
         .register("/sw.js")
         .then((reg) => {
-          console.log("GymLink Service Worker registrado con éxito:", reg.scope);
+          console.log("OnlyGym Service Worker registrado con éxito:", reg.scope);
         })
         .catch((err) => {
           console.error("Error al registrar Service Worker:", err);

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
 
 export interface ItemVentaInput {
   productoId: number;
@@ -27,7 +28,9 @@ export interface ProcesarVentaInput {
  */
 export async function getProductosPOS(sucursalId?: number, categoria?: string, buscar?: string) {
   try {
-    const where: any = { estado: "activo" };
+    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
+    await requireTenantModule(context.tenantId, "caja");
+    const where: any = { tenantId: context.tenantId, estado: "activo" };
     
     if (categoria && categoria !== "todas") {
       where.categoria = categoria;
@@ -49,7 +52,7 @@ export async function getProductosPOS(sucursalId?: number, categoria?: string, b
 
     // Obtener todas las categorías únicas disponibles
     const categoriasDb = await prisma.producto.findMany({
-      where: { estado: "activo", categoria: { not: null } },
+      where: { tenantId: context.tenantId, estado: "activo", categoria: { not: null } },
       select: { categoria: true },
       distinct: ["categoria"],
     });
@@ -78,6 +81,7 @@ export async function getProductosPOS(sucursalId?: number, categoria?: string, b
  */
 export async function searchClientesPOS(query: string) {
   try {
+    const context = await requireStaffContext();
     if (!query || query.trim().length < 1) {
       return { success: true, data: [] };
     }
@@ -85,6 +89,7 @@ export async function searchClientesPOS(query: string) {
     const q = query.trim();
     const clientes = await prisma.cliente.findMany({
       where: {
+        tenantId: context.tenantId,
         estado: "activo",
         OR: [
           { documento: { contains: q, mode: "insensitive" } },
@@ -128,6 +133,8 @@ export async function searchClientesPOS(query: string) {
 export async function procesarVentaPOS(data: ProcesarVentaInput) {
   try {
     const { items, clienteId, sucursalId, tipoPago, metodoPago, notas, userId } = data;
+    const context = await requireStaffContext({ branchId: sucursalId });
+    await requireTenantModule(context.tenantId, "caja");
 
     if (!items || items.length === 0) {
       return { success: false, error: "El carrito de compras está vacío" };
@@ -140,7 +147,7 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
     // 1. Validar stock de cada producto en base de datos
     const productoIds = items.map(i => i.productoId);
     const productosEnDb = await prisma.producto.findMany({
-      where: { id: { in: productoIds } },
+      where: { tenantId: context.tenantId, id: { in: productoIds }, estado: "activo" },
     });
 
     const productoMap = new Map(productosEnDb.map(p => [p.id, p]));
@@ -159,14 +166,14 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
     }
 
     // 2. Calcular total de la venta
-    const total = items.reduce((sum, item) => sum + item.precioUnitario * item.cantidad, 0);
+    const total = items.reduce((sum, item) => sum + Number(productoMap.get(item.productoId)!.precio) * item.cantidad, 0);
 
     // 3. Validar límite de crédito si es cuenta corriente
     let cuentaClienteId: number | null = null;
     if (tipoPago === "cuenta_corriente" && clienteId) {
-      let cuenta = await prisma.cuentaCorriente.findUnique({
-        where: { clienteId },
-      });
+      const member = await prisma.cliente.findFirst({ where: { id: clienteId, tenantId: context.tenantId }, select: { id: true } });
+      if (!member) return { success: false, error: "Socio no encontrado" };
+      let cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId: member.id } });
 
       if (!cuenta) {
         cuenta = await prisma.cuentaCorriente.create({
@@ -195,13 +202,14 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
       // a) Crear la Venta
       const venta = await tx.venta.create({
         data: {
+          tenantId: context.tenantId,
           sucursalId,
           clienteId: clienteId || null,
           tipoPago,
           estadoPago: tipoPago === "cuenta_corriente" ? "pendiente" : "pagado",
           metodoPago: metodoPago || tipoPago,
           total,
-          userId: userId || null,
+          userId: context.userId,
           notas: notas || null,
         },
       });
@@ -213,20 +221,21 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
             ventaId: venta.id,
             productoId: item.productoId,
             cantidad: item.cantidad,
-            precioUnitario: item.precioUnitario,
-            subtotal: item.precioUnitario * item.cantidad,
+            precioUnitario: productoMap.get(item.productoId)!.precio,
+            subtotal: Number(productoMap.get(item.productoId)!.precio) * item.cantidad,
           },
         });
 
         // c) Descontar stock
-        await tx.producto.update({
-          where: { id: item.productoId },
+        const stockUpdate = await tx.producto.updateMany({
+          where: { id: item.productoId, tenantId: context.tenantId, stock: { gte: item.cantidad } },
           data: {
             stock: {
               decrement: item.cantidad,
             },
           },
         });
+        if (!stockUpdate.count) throw new Error("Stock modificado durante la venta");
       }
 
       // d) Si es cuenta corriente, actualizar saldo y registrar movimiento
@@ -246,7 +255,7 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
             tipo: "cargo",
             monto: total,
             concepto: `Compra en cantina - Ticket #${venta.id}`,
-            usuarioAdminId: userId || null,
+            usuarioAdminId: context.userId,
           },
         });
       }
@@ -316,7 +325,8 @@ export async function getHistorialVentasPOS(params: {
 }) {
   try {
     const { desde, hasta, sucursalId, tipoPago } = params;
-    const where: any = {};
+    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
+    const where: any = { tenantId: context.tenantId };
 
     if (desde || hasta) {
       where.fechaVenta = {};
@@ -423,8 +433,9 @@ export async function getHistorialVentasPOS(params: {
  */
 export async function getDetalleVentaPOS(ventaId: number) {
   try {
-    const venta = await prisma.venta.findUnique({
-      where: { id: ventaId },
+    const context = await requireStaffContext();
+    const venta = await prisma.venta.findFirst({
+      where: { id: ventaId, tenantId: context.tenantId },
       include: {
         cliente: true,
         user: true,

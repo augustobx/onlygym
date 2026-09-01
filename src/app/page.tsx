@@ -44,11 +44,11 @@ export default function Home() {
             <Dumbbell className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-sm font-black tracking-tight text-white leading-none">GymLink Socio</h1>
+            <h1 className="text-sm font-black tracking-tight text-white leading-none">OnlyGym</h1>
             <span className="text-[10px] text-cyan-400 font-semibold">Carnet & Acceso Digital</span>
           </div>
         </div>
-        <PWAInstallPrompt variant="button" appName="GymLink Socio" />
+        <PWAInstallPrompt variant="button" appName="OnlyGym Socio" />
       </header>
 
       {/* Main Content */}
@@ -126,12 +126,12 @@ export default function Home() {
           </form>
         </div>
 
-        <PWAInstallPrompt variant="card" appName="GymLink Socio" />
+        <PWAInstallPrompt variant="card" appName="OnlyGym Socio" />
       </main>
 
       {/* Footer */}
       <footer className="max-w-md mx-auto w-full text-center text-[11px] text-slate-500 pt-3 border-t border-slate-800/60 font-medium">
-        <p>© GymLink Socio App · Tu portal de entrenamiento</p>
+        <p>© OnlyGym · La app de tu gimnasio</p>
       </footer>
     </div>
   );

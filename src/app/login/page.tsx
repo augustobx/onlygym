@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, User, ShieldCheck } from "lucide-react";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/seleccionar-sucursal");
+      router.push("/seleccionar-gimnasio");
     } catch (err) {
       setError("Error de conexión con el servidor");
       setLoading(false);
@@ -48,7 +49,7 @@ export default function LoginPage() {
         </div>
         <div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            GymLink Enterprise
+            OnlyGym
           </h2>
           <p className="text-xs text-slate-400 font-semibold mt-1">
             Acceso Administrativo & Personal de Sede
@@ -58,7 +59,7 @@ export default function LoginPage() {
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md space-y-4">
         <div className="bg-slate-900/90 backdrop-blur-md py-6 px-6 sm:px-8 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
-          <form className="space-y-4" onSubmit={handleLogin}>
+          <form className="space-y-4" method="post" onSubmit={handleLogin}>
             {error && (
               <div className="bg-rose-950/80 border border-rose-500/50 text-rose-200 px-3 py-2 rounded-lg text-xs text-center font-bold">
                 {error}
@@ -83,6 +84,7 @@ export default function LoginPage() {
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
                   placeholder="admin"
                   autoFocus
+                  autoComplete="username"
                 />
               </div>
             </div>
@@ -104,6 +106,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                 />
               </div>
             </div>
@@ -115,10 +118,11 @@ export default function LoginPage() {
             >
               {loading ? "Verificando..." : "Ingresar al Panel"}
             </button>
+            <Link href="/recuperar-password" className="block text-center text-xs font-bold text-cyan-400 hover:text-cyan-300">¿Olvidaste tu contraseña?</Link>
           </form>
         </div>
 
-        <PWAInstallPrompt variant="card" appName="GymLink Admin" />
+        <PWAInstallPrompt variant="card" appName="OnlyGym Admin" />
       </div>
     </div>
   );

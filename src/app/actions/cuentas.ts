@@ -3,10 +3,13 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
+import { requireStaffContext } from "@/lib/tenant-context";
 
 export async function getCuentas() {
   try {
+    const context = await requireStaffContext();
     const cuentas = await prisma.cuentaCorriente.findMany({
+      where: { cliente: { tenantId: context.tenantId } },
       include: {
         cliente: true
       },
@@ -23,7 +26,8 @@ export async function getCuentas() {
 
 export async function registrarPagoCuenta(clienteId: number, monto: number, concepto: string, userId?: string) {
   try {
-    const cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId } });
+    const context = await requireStaffContext();
+    const cuenta = await prisma.cuentaCorriente.findFirst({ where: { clienteId, cliente: { tenantId: context.tenantId } } });
     if (!cuenta) {
       return { success: false, error: "El cliente no tiene cuenta corriente" };
     }
@@ -39,7 +43,7 @@ export async function registrarPagoCuenta(clienteId: number, monto: number, conc
           tipo: "pago",
           monto,
           concepto,
-          usuarioAdminId: userId
+          usuarioAdminId: context.userId
         }
       })
     ]);
@@ -53,7 +57,10 @@ export async function registrarPagoCuenta(clienteId: number, monto: number, conc
 
 export async function registrarCargoCuenta(clienteId: number, monto: number, concepto: string, userId?: string) {
   try {
-    let cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId } });
+    const context = await requireStaffContext();
+    const member = await prisma.cliente.findFirst({ where: { id: clienteId, tenantId: context.tenantId }, select: { id: true } });
+    if (!member) return { success: false, error: "Cliente no encontrado" };
+    let cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId: member.id } });
     if (!cuenta) {
       cuenta = await prisma.cuentaCorriente.create({
         data: { clienteId, saldo: 0, limiteCredito: 0 }
@@ -71,7 +78,7 @@ export async function registrarCargoCuenta(clienteId: number, monto: number, con
           tipo: "cargo",
           monto,
           concepto,
-          usuarioAdminId: userId
+          usuarioAdminId: context.userId
         }
       })
     ]);
@@ -85,7 +92,8 @@ export async function registrarCargoCuenta(clienteId: number, monto: number, con
 
 export async function getMovimientosCuenta(clienteId: number) {
   try {
-    const cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId } });
+    const context = await requireStaffContext();
+    const cuenta = await prisma.cuentaCorriente.findFirst({ where: { clienteId, cliente: { tenantId: context.tenantId } } });
     if (!cuenta) return { success: true, data: [] };
 
     const movimientos = await prisma.cuentaMovimiento.findMany({
@@ -109,7 +117,10 @@ export async function getMovimientosCuenta(clienteId: number) {
 
 export async function setLimiteCredito(clienteId: number, limite: number) {
   try {
-    const cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId } });
+    const context = await requireStaffContext();
+    const member = await prisma.cliente.findFirst({ where: { id: clienteId, tenantId: context.tenantId }, select: { id: true } });
+    if (!member) return { success: false, error: "Cliente no encontrado" };
+    const cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId: member.id } });
     if (!cuenta) {
       await prisma.cuentaCorriente.create({
         data: { clienteId, saldo: 0, limiteCredito: limite }
