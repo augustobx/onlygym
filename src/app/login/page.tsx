@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, UserRound, ShieldCheck } from "lucide-react";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import Link from "next/link";
+import { getPublicTenantStatus } from "@/app/actions/tenant-public";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +13,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void getPublicTenantStatus().then((result) => {
+      if (result.status === "suspended") router.replace("/suspendido");
+      else if (result.scope === "platform") router.replace("/superadmin/login");
+    });
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
