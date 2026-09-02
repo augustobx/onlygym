@@ -183,11 +183,34 @@ export async function getPortalData() {
             return { personasAdentro, capacidadMaxima, porcentaje };
           })
         : Promise.resolve(null),
-      prisma.movimientoPuntos.aggregate({ where: { tenantId: context.tenantId, clienteId: context.clienteId }, _sum: { puntos: true } }),
+      prisma.movimientoPuntos.aggregate({
+        where: { tenantId: context.tenantId, clienteId: context.clienteId },
+        _sum: { puntos: true },
+      }),
       prisma.reservaClase.findMany({
-        where: { tenantId: context.tenantId, clienteId: context.clienteId, OR: [{ estado: { in: ["cancelada", "asistio"] } }, { clase: { inicio: { lt: new Date() } } }] },
-        include: { clase: { include: { tipoClase: true, sucursal: true, entrenador: { include: { user: { select: { name: true } } } } } },
-        orderBy: { creadaEn: "desc" }, take: 30,
+        where: {
+          tenantId: context.tenantId,
+          clienteId: context.clienteId,
+          OR: [
+            { estado: { in: ["cancelada", "asistio"] } },
+            { clase: { inicio: { lt: new Date() } } },
+          ],
+        },
+        include: {
+          clase: {
+            include: {
+              tipoClase: true,
+              sucursal: true,
+              entrenador: {
+                include: {
+                  user: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { creadaEn: "desc" },
+        take: 30,
       }),
     ]);
     const visitasMes = cliente.ingresos.filter((ingreso) => ingreso.estado === "ACTIVO" && ingreso.fechaHora >= inicioMes).length;
