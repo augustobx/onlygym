@@ -6,7 +6,7 @@ import { serializeData } from "@/lib/serialize";
 import { requireStaffContext } from "@/lib/tenant-context";
 
 export interface HorarioDiaInput {
-  diaSemana: number; // 0=Dom, 1=Lun, ..., 6=Sab
+  diaSemana: number;
   tipoApertura: "completo" | "mañana" | "tarde" | "doble" | "cerrado";
   horaApertura1?: string | null;
   horaCierre1?: string | null;
@@ -26,28 +26,20 @@ const DIAS_DEFAULT: HorarioDiaInput[] = [
   { diaSemana: 0, tipoApertura: "cerrado", horaApertura1: null, horaCierre1: null, capacidadMaxima: 0, activo: false },
 ];
 
-/**
- * Obtiene la configuración semanal de horarios para una sucursal
- * (Si no existe configuración previa, inicializa los días por defecto)
- */
 export async function getHorariosSemana(sucursalId: number = 1) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
     let horarios = await prisma.configuracionHorario.findMany({
-      where: { sucursalId },
+      where: { sucursalId, sucursal: { tenantId: context.tenantId } },
       orderBy: { diaSemana: "asc" },
     });
 
-    // Si aún no hay configuración creada para esta sede, inicializarla
     if (horarios.length < 7) {
       for (const def of DIAS_DEFAULT) {
+        const branch = await prisma.sucursal.findFirst({ where: { id: sucursalId, tenantId: context.tenantId }, select: { id: true } });
+        if (!branch) return { success: false, error: "Sucursal no autorizada" };
         await prisma.configuracionHorario.upsert({
-          where: {
-            sucursalId_diaSemana: {
-              sucursalId,
-              diaSemana: def.diaSemana,
-            },
-          },
+          where: { sucursalId_diaSemana: { sucursalId, diaSemana: def.diaSemana } },
           update: {},
           create: {
             sucursalId,
@@ -64,12 +56,11 @@ export async function getHorariosSemana(sucursalId: number = 1) {
       }
 
       horarios = await prisma.configuracionHorario.findMany({
-        where: { sucursalId },
+        where: { sucursalId, sucursal: { tenantId: context.tenantId } },
         orderBy: { diaSemana: "asc" },
       });
     }
 
-    // Reordenar de Lunes (1) a Domingo (0) para la visualización habitual
     const ordenLunesADomingo = [1, 2, 3, 4, 5, 6, 0];
     const ordenados = ordenLunesADomingo.map(
       d => horarios.find(h => h.diaSemana === d) || DIAS_DEFAULT.find(def => def.diaSemana === d)!
@@ -82,20 +73,15 @@ export async function getHorariosSemana(sucursalId: number = 1) {
   }
 }
 
-/**
- * Guarda la configuración semanal de horarios de una sucursal
- */
 export async function guardarHorariosSemana(sucursalId: number, horarios: HorarioDiaInput[]) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
+    const branch = await prisma.sucursal.findFirst({ where: { id: sucursalId, tenantId: context.tenantId }, select: { id: true } });
+    if (!branch) return { success: false, error: "Sucursal no autorizada" };
+
     for (const h of horarios) {
       await prisma.configuracionHorario.upsert({
-        where: {
-          sucursalId_diaSemana: {
-            sucursalId,
-            diaSemana: h.diaSemana,
-          },
-        },
+        where: { sucursalId_diaSemana: { sucursalId, diaSemana: h.diaSemana } },
         update: {
           tipoApertura: h.tipoApertura,
           horaApertura1: h.horaApertura1 || null,
@@ -122,7 +108,6 @@ export async function guardarHorariosSemana(sucursalId: number, horarios: Horari
     revalidatePath("/dashboard/configuracion");
     revalidatePath("/dashboard/aforo");
     revalidatePath("/molinete");
-
     return { success: true };
   } catch (error) {
     console.error("Error guardando horarios:", error);
@@ -130,49 +115,32 @@ export async function guardarHorariosSemana(sucursalId: number, horarios: Horari
   }
 }
 
-/**
- * Valida si el gimnasio está abierto en este momento
- */
 export async function verificarHorarioAtencion(sucursalId: number = 1) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
-    const ahora = new Date();
-    const diaSemana = ahora.getDay(); // 0 a 6
-    const horaActualStr = ahora.toTimeString().substring(0, 5); // "HH:MM"
+    const branch = await prisma.sucursal.findFirst({ where: { id: sucursalId, tenantId: context.tenantId }, select: { id: true } });
+    if (!branch) return { permitido: false, motivo: "Sucursal no autorizada" };
 
+    const ahora = new Date();
+    const diaSemana = ahora.getDay();
+    const horaActualStr = ahora.toTimeString().substring(0, 5);
     const config = await prisma.configuracionHorario.findUnique({
-      where: {
-        sucursalId_diaSemana: {
-          sucursalId,
-          diaSemana,
-        },
-      },
+      where: { sucursalId_diaSemana: { sucursalId, diaSemana } },
     });
 
     if (!config || !config.activo || config.tipoApertura === "cerrado") {
-      return {
-        permitido: false,
-        motivo: "El gimnasio se encuentra cerrado hoy.",
-        diaSemana,
-        horaActual: horaActualStr,
-      };
+      return { permitido: false, motivo: "El gimnasio se encuentra cerrado hoy.", diaSemana, horaActual: horaActualStr };
     }
 
     const { tipoApertura, horaApertura1, horaCierre1, horaApertura2, horaCierre2 } = config;
-
-    // Validación por tipo de apertura
     if (tipoApertura === "completo" || tipoApertura === "mañana" || tipoApertura === "tarde") {
-      if (horaApertura1 && horaCierre1) {
-        if (horaActualStr >= horaApertura1 && horaActualStr <= horaCierre1) {
-          return { permitido: true, diaSemana, horaActual: horaActualStr };
-        }
-      }
-    } else if (tipoApertura === "doble") {
-      const turno1 = horaApertura1 && horaCierre1 && (horaActualStr >= horaApertura1 && horaActualStr <= horaCierre1);
-      const turno2 = horaApertura2 && horaCierre2 && (horaActualStr >= horaApertura2 && horaActualStr <= horaCierre2);
-      if (turno1 || turno2) {
+      if (horaApertura1 && horaCierre1 && horaActualStr >= horaApertura1 && horaActualStr <= horaCierre1) {
         return { permitido: true, diaSemana, horaActual: horaActualStr };
       }
+    } else if (tipoApertura === "doble") {
+      const turno1 = horaApertura1 && horaCierre1 && horaActualStr >= horaApertura1 && horaActualStr <= horaCierre1;
+      const turno2 = horaApertura2 && horaCierre2 && horaActualStr >= horaApertura2 && horaActualStr <= horaCierre2;
+      if (turno1 || turno2) return { permitido: true, diaSemana, horaActual: horaActualStr };
     }
 
     return {
@@ -183,67 +151,44 @@ export async function verificarHorarioAtencion(sucursalId: number = 1) {
     };
   } catch (error) {
     console.error("Error verificando horario de atención:", error);
-    return { permitido: true }; // Fallback permisivo
+    return { permitido: false, motivo: "No se pudo verificar el horario de atención" };
   }
 }
 
-/**
- * Obtiene el estado de aforo y ocupación en tiempo real para el monitor
- */
 export async function getAforoEnVivo(sucursalId: number = 1) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
-
     const ahora = new Date();
     const diaSemana = ahora.getDay();
 
-    // 1. Obtener ingresos permitidos de hoy que no han marcado salida
     const ingresosActivos = await prisma.ingreso.findMany({
       where: {
+        tenantId: context.tenantId,
         sucursalId,
         fechaHora: { gte: hoy },
         estado: { in: ["permitido", "ACTIVO"] },
         horaSalida: null,
       },
-      include: {
-        cliente: true,
-      },
+      include: { cliente: true },
       orderBy: { fechaHora: "desc" },
     });
 
-    // 2. Obtener capacidad configurada para hoy
-    const configHorario = await prisma.configuracionHorario.findUnique({
-      where: {
-        sucursalId_diaSemana: {
-          sucursalId,
-          diaSemana,
-        },
-      },
+    const configHorario = await prisma.configuracionHorario.findFirst({
+      where: { sucursalId, diaSemana, sucursal: { tenantId: context.tenantId } },
     });
 
     const capacidadMaxima = configHorario?.capacidadMaxima || 50;
     const personasAdentro = ingresosActivos.length;
-    const porcentaje = capacidadMaxima > 0 
-      ? Math.min(100, Math.round((personasAdentro / capacidadMaxima) * 100)) 
-      : 0;
+    const porcentaje = capacidadMaxima > 0 ? Math.min(100, Math.round((personasAdentro / capacidadMaxima) * 100)) : 0;
 
-    // Calcular nivel de afluencia
     let nivel: "bajo" | "medio" | "alto" | "alerta" = "bajo";
     let nivelTexto = "Poca gente, ideal para entrenar";
-    if (porcentaje >= 90) {
-      nivel = "alerta";
-      nivelTexto = "Capacidad casi al límite / Aforo completo";
-    } else if (porcentaje >= 75) {
-      nivel = "alto";
-      nivelTexto = "Mucha concurrencia";
-    } else if (porcentaje >= 40) {
-      nivel = "medio";
-      nivelTexto = "Afluencia moderada";
-    }
+    if (porcentaje >= 90) { nivel = "alerta"; nivelTexto = "Capacidad casi al límite / Aforo completo"; }
+    else if (porcentaje >= 75) { nivel = "alto"; nivelTexto = "Mucha concurrencia"; }
+    else if (porcentaje >= 40) { nivel = "medio"; nivelTexto = "Afluencia moderada"; }
 
-    // Formatear personas adentro con tiempo transcurrido
     const personasPresentes = ingresosActivos.map(i => {
       const minutosAdentro = Math.max(1, Math.floor((ahora.getTime() - i.fechaHora.getTime()) / 60000));
       return {
@@ -254,33 +199,19 @@ export async function getAforoEnVivo(sucursalId: number = 1) {
         foto: i.cliente.foto,
         horaEntrada: i.fechaHora.toISOString(),
         minutosAdentro,
-        tiempoFormateado: minutosAdentro < 60 
-          ? `Hace ${minutosAdentro} min` 
-          : `Hace ${Math.floor(minutosAdentro / 60)}h ${minutosAdentro % 60}m`,
+        tiempoFormateado: minutosAdentro < 60 ? `Hace ${minutosAdentro} min` : `Hace ${Math.floor(minutosAdentro / 60)}h ${minutosAdentro % 60}m`,
       };
     });
 
-    // 3. Obtener últimas 8 salidas de hoy para auditoría
     const ultimasSalidas = await prisma.ingreso.findMany({
-      where: {
-        sucursalId,
-        fechaHora: { gte: hoy },
-        horaSalida: { not: null },
-      },
-      include: {
-        cliente: true,
-      },
+      where: { tenantId: context.tenantId, sucursalId, fechaHora: { gte: hoy }, horaSalida: { not: null } },
+      include: { cliente: true },
       orderBy: { horaSalida: "desc" },
       take: 8,
     });
 
-    // Calcular duración promedio de estadía hoy
     const todasLasSalidas = await prisma.ingreso.findMany({
-      where: {
-        sucursalId,
-        fechaHora: { gte: hoy },
-        duracionMinutos: { not: null },
-      },
+      where: { tenantId: context.tenantId, sucursalId, fechaHora: { gte: hoy }, duracionMinutos: { not: null } },
       select: { duracionMinutos: true },
     });
 
@@ -314,37 +245,27 @@ export async function getAforoEnVivo(sucursalId: number = 1) {
   }
 }
 
-/**
- * Registra la salida individual de un socio por su ID de ingreso
- */
 export async function registrarSalidaSocio(ingresoId: number) {
   const context = await requireStaffContext();
-  const owned = await prisma.ingreso.findFirst({ where: { id: ingresoId, tenantId: context.tenantId }, select: { id: true } });
-  if (!owned) return { success: false, error: "Ingreso no encontrado" };
   try {
-    const ingreso = await prisma.ingreso.findUnique({
-      where: { id: ingresoId },
+    const ingreso = await prisma.ingreso.findFirst({
+      where: { id: ingresoId, tenantId: context.tenantId },
     });
 
     if (!ingreso || ingreso.horaSalida) {
-      return { success: false, error: "El ingreso no existe o ya fue marcado como salido" };
+      return { success: false, error: "El ingreso no existe, no pertenece al gimnasio o ya fue marcado como salido" };
     }
 
     const ahora = new Date();
     const duracionMinutos = Math.max(1, Math.floor((ahora.getTime() - ingreso.fechaHora.getTime()) / 60000));
-
-    await prisma.ingreso.update({
-      where: { id: ingresoId },
-      data: {
-        horaSalida: ahora,
-        duracionMinutos,
-      },
+    await prisma.ingreso.updateMany({
+      where: { id: ingreso.id, tenantId: context.tenantId },
+      data: { horaSalida: ahora, duracionMinutos },
     });
 
     revalidatePath("/dashboard/aforo");
     revalidatePath("/dashboard");
     revalidatePath("/molinete");
-
     return { success: true, duracionMinutos };
   } catch (error) {
     console.error("Error registrando salida:", error);
@@ -352,17 +273,15 @@ export async function registrarSalidaSocio(ingresoId: number) {
   }
 }
 
-/**
- * Registra la salida de un socio buscando por su documento
- */
 export async function registrarSalidaPorDocumento(documento: string, sucursalId: number = 1) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const ingresoAbierto = await prisma.ingreso.findFirst({
       where: {
+        tenantId: context.tenantId,
         documento: documento.trim(),
         sucursalId,
         fechaHora: { gte: hoy },
@@ -372,69 +291,47 @@ export async function registrarSalidaPorDocumento(documento: string, sucursalId:
       include: { cliente: true },
     });
 
-    if (!ingresoAbierto) {
-      return { success: false, error: "No se encontró un ingreso activo para este DNI en el día de hoy" };
-    }
+    if (!ingresoAbierto) return { success: false, error: "No se encontró un ingreso activo para este DNI en el día de hoy" };
 
     const ahora = new Date();
     const duracionMinutos = Math.max(1, Math.floor((ahora.getTime() - ingresoAbierto.fechaHora.getTime()) / 60000));
-
-    await prisma.ingreso.update({
-      where: { id: ingresoAbierto.id },
-      data: {
-        horaSalida: ahora,
-        duracionMinutos,
-      },
+    await prisma.ingreso.updateMany({
+      where: { id: ingresoAbierto.id, tenantId: context.tenantId },
+      data: { horaSalida: ahora, duracionMinutos },
     });
 
     revalidatePath("/dashboard/aforo");
     revalidatePath("/dashboard");
     revalidatePath("/molinete");
-
-    return {
-      success: true,
-      mensaje: `Salida registrada para ${ingresoAbierto.cliente.nombre} ${ingresoAbierto.cliente.apellido}. Permanencia: ${duracionMinutos} min.`,
-    };
+    return { success: true, mensaje: `Salida registrada para ${ingresoAbierto.cliente.nombre} ${ingresoAbierto.cliente.apellido}. Permanencia: ${duracionMinutos} min.` };
   } catch (error) {
     console.error("Error registrando salida por documento:", error);
     return { success: false, error: "Error al procesar salida" };
   }
 }
 
-/**
- * Salida masiva de todas las personas activas (ej: cierre del gimnasio)
- */
 export async function marcarSalidaTodos(sucursalId: number = 1) {
-  await requireStaffContext({ branchId: sucursalId });
+  const context = await requireStaffContext({ branchId: sucursalId });
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
-
     const ahora = new Date();
 
     const ingresosAbiertos = await prisma.ingreso.findMany({
-      where: {
-        sucursalId,
-        fechaHora: { gte: hoy },
-        horaSalida: null,
-      },
+      where: { tenantId: context.tenantId, sucursalId, fechaHora: { gte: hoy }, horaSalida: null },
     });
 
     for (const ing of ingresosAbiertos) {
       const duracionMinutos = Math.max(1, Math.floor((ahora.getTime() - ing.fechaHora.getTime()) / 60000));
-      await prisma.ingreso.update({
-        where: { id: ing.id },
-        data: {
-          horaSalida: ahora,
-          duracionMinutos,
-        },
+      await prisma.ingreso.updateMany({
+        where: { id: ing.id, tenantId: context.tenantId },
+        data: { horaSalida: ahora, duracionMinutos },
       });
     }
 
     revalidatePath("/dashboard/aforo");
     revalidatePath("/dashboard");
     revalidatePath("/molinete");
-
     return { success: true, count: ingresosAbiertos.length };
   } catch (error) {
     console.error("Error marcando salida a todos:", error);
