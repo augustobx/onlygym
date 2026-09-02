@@ -28,8 +28,10 @@ RUN BETTER_AUTH_SECRET="onlygym-build-stage-placeholder-never-use-at-runtime" \
 
 # 3. Short-lived migration/bootstrap image.
 # Prisma CLI remains here, isolated from the public web runtime.
+# Bootstrap imports @prisma/client, so this target also needs its generated client.
 FROM deps AS migrate
 WORKDIR /app
+RUN npx prisma generate
 COPY scripts ./scripts
 ENV NODE_ENV=production
 
