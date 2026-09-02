@@ -1,9 +1,16 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { Prisma, RolTenant } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
+import { canChargeCurrentAccount, getAvailableCredit } from "@/lib/credit-policy";
+
+const POS_ROLES = [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION];
+const PAYMENT_TYPES = ["efectivo", "cuenta_corriente", "tarjeta", "transferencia"] as const;
+
+type PaymentType = (typeof PAYMENT_TYPES)[number];
 
 export interface ItemVentaInput {
   productoId: number;
@@ -17,26 +24,38 @@ export interface ProcesarVentaInput {
   items: ItemVentaInput[];
   clienteId?: number | null;
   sucursalId: number;
-  tipoPago: "efectivo" | "cuenta_corriente" | "tarjeta" | "transferencia";
+  tipoPago: PaymentType;
   metodoPago?: string;
   notas?: string;
   userId?: string;
 }
 
-/**
- * Obtiene los productos activos para el catálogo del POS con stock disponible
- */
-export async function getProductosPOS(sucursalId?: number, categoria?: string, buscar?: string) {
+async function requirePosContext(requestedBranchId?: number) {
+  const context = await requireStaffContext({ roles: POS_ROLES });
+  await requireTenantModule(context.tenantId, "caja");
+  if (!context.branchId) throw new Error("Seleccioná una sucursal antes de operar la caja");
+  if (requestedBranchId && requestedBranchId !== context.branchId) {
+    throw new Error("La sucursal solicitada no coincide con la sede activa");
+  }
+  return context;
+}
+
+function expectedPosError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (error.message === "NO_CREDIT") return "La cuenta corriente no tiene crédito habilitado";
+  if (error.message === "CREDIT_LIMIT") return "La compra supera el crédito disponible del socio";
+  if (error.message === "STOCK_CHANGED") return "El stock cambió mientras se procesaba la venta. Revisá el carrito e intentá nuevamente";
+  if (error.message === "Seleccioná una sucursal antes de operar la caja" || error.message === "La sucursal solicitada no coincide con la sede activa") return error.message;
+  return fallback;
+}
+
+export async function getProductosPOS(sucursalId: number, categoria?: string, buscar?: string) {
   try {
-    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
-    await requireTenantModule(context.tenantId, "caja");
-    const where: any = { tenantId: context.tenantId, estado: "activo" };
-    
-    if (categoria && categoria !== "todas") {
-      where.categoria = categoria;
-    }
-    
-    if (buscar && buscar.trim() !== "") {
+    const context = await requirePosContext(sucursalId);
+    const where: Prisma.ProductoWhereInput = { tenantId: context.tenantId, estado: "activo" };
+
+    if (categoria && categoria !== "todas") where.categoria = categoria;
+    if (buscar?.trim()) {
       const q = buscar.trim();
       where.OR = [
         { nombre: { contains: q, mode: "insensitive" } },
@@ -45,238 +64,183 @@ export async function getProductosPOS(sucursalId?: number, categoria?: string, b
       ];
     }
 
-    const productos = await prisma.producto.findMany({
-      where,
-      orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
-    });
-
-    // Obtener todas las categorías únicas disponibles
-    const categoriasDb = await prisma.producto.findMany({
-      where: { tenantId: context.tenantId, estado: "activo", categoria: { not: null } },
-      select: { categoria: true },
-      distinct: ["categoria"],
-    });
-    const categorias = categoriasDb
-      .map(c => c.categoria)
-      .filter((c): c is string => Boolean(c));
+    const [productos, categoriasDb] = await Promise.all([
+      prisma.producto.findMany({ where, orderBy: [{ categoria: "asc" }, { nombre: "asc" }] }),
+      prisma.producto.findMany({
+        where: { tenantId: context.tenantId, estado: "activo", categoria: { not: null } },
+        select: { categoria: true },
+        distinct: ["categoria"],
+      }),
+    ]);
 
     return {
       success: true,
       data: serializeData({
-        productos: productos.map(p => ({
-          ...p,
-          precio: Number(p.precio),
-        })),
-        categorias,
+        productos: productos.map((producto) => ({ ...producto, precio: Number(producto.precio) })),
+        categorias: categoriasDb.map(({ categoria }) => categoria).filter((categoria): categoria is string => Boolean(categoria)),
       }),
     };
   } catch (error) {
     console.error("Error al obtener productos POS:", error);
-    return { success: false, error: "Error al cargar productos para la venta" };
+    return { success: false, error: expectedPosError(error, "Error al cargar productos para la venta") };
   }
 }
 
-/**
- * Búsqueda de clientes rápida para asociar a la venta o para fiar en cuenta corriente
- */
-export async function searchClientesPOS(query: string) {
+export async function searchClientesPOS(query: string, sucursalId: number) {
   try {
-    const context = await requireStaffContext();
-    if (!query || query.trim().length < 1) {
-      return { success: true, data: [] };
-    }
-
+    const context = await requirePosContext(sucursalId);
     const q = query.trim();
+    if (q.length < 2) return { success: true, data: [] };
+
     const clientes = await prisma.cliente.findMany({
       where: {
         tenantId: context.tenantId,
         estado: "activo",
+        sucursales: { some: { id: context.branchId } },
         OR: [
           { documento: { contains: q, mode: "insensitive" } },
           { nombre: { contains: q, mode: "insensitive" } },
           { apellido: { contains: q, mode: "insensitive" } },
         ],
       },
-      include: {
-        cuentaCorriente: true,
-      },
+      include: { cuentaCorriente: true },
+      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
       take: 8,
     });
 
     return {
       success: true,
-      data: serializeData(
-        clientes.map(c => ({
-          id: c.id,
-          documento: c.documento,
-          nombre: c.nombre,
-          apellido: c.apellido,
-          telefono: c.telefono,
-          email: c.email,
-          saldoCuenta: c.cuentaCorriente ? Number(c.cuentaCorriente.saldo) : 0,
-          limiteCredito: c.cuentaCorriente ? Number(c.cuentaCorriente.limiteCredito) : 5000,
-          disponibleCredito: c.cuentaCorriente
-            ? Number(c.cuentaCorriente.limiteCredito) - Number(c.cuentaCorriente.saldo)
-            : 5000,
-        }))
-      ),
+      data: serializeData(clientes.map((cliente) => {
+        const saldo = cliente.cuentaCorriente ? Number(cliente.cuentaCorriente.saldo) : 0;
+        const limite = cliente.cuentaCorriente ? Number(cliente.cuentaCorriente.limiteCredito) : 0;
+        return {
+          id: cliente.id,
+          documento: cliente.documento,
+          nombre: cliente.nombre,
+          apellido: cliente.apellido,
+          telefono: cliente.telefono,
+          email: cliente.email,
+          saldoCuenta: saldo,
+          limiteCredito: limite,
+          disponibleCredito: getAvailableCredit(saldo, limite),
+        };
+      })),
     };
   } catch (error) {
     console.error("Error buscando clientes POS:", error);
-    return { success: false, error: "Error buscando clientes" };
+    return { success: false, error: expectedPosError(error, "Error buscando clientes") };
   }
 }
 
-/**
- * Procesa la venta de productos en la cantina/kiosco
- */
 export async function procesarVentaPOS(data: ProcesarVentaInput) {
   try {
-    const { items, clienteId, sucursalId, tipoPago, metodoPago, notas, userId } = data;
-    const context = await requireStaffContext({ branchId: sucursalId });
-    await requireTenantModule(context.tenantId, "caja");
+    const { items, clienteId, sucursalId, tipoPago, metodoPago, notas } = data;
+    const context = await requirePosContext(sucursalId);
 
-    if (!items || items.length === 0) {
-      return { success: false, error: "El carrito de compras está vacío" };
+    if (!Array.isArray(items) || items.length === 0) return { success: false, error: "El carrito de compras está vacío" };
+    if (!PAYMENT_TYPES.includes(tipoPago as PaymentType)) return { success: false, error: "Método de pago no válido" };
+    if (tipoPago === "cuenta_corriente" && !clienteId) return { success: false, error: "Seleccioná un socio para vender a cuenta corriente" };
+
+    const productIds = items.map((item) => item.productoId);
+    if (productIds.some((id) => !Number.isInteger(id) || id <= 0) || new Set(productIds).size !== productIds.length) {
+      return { success: false, error: "El carrito contiene productos inválidos" };
+    }
+    if (items.some((item) => !Number.isInteger(item.cantidad) || item.cantidad <= 0)) {
+      return { success: false, error: "Las cantidades del carrito deben ser enteros positivos" };
     }
 
-    if (tipoPago === "cuenta_corriente" && !clienteId) {
-      return { success: false, error: "Debe seleccionar un socio para realizar una venta a Cuenta Corriente" };
-    }
-
-    // 1. Validar stock de cada producto en base de datos
-    const productoIds = items.map(i => i.productoId);
     const productosEnDb = await prisma.producto.findMany({
-      where: { tenantId: context.tenantId, id: { in: productoIds }, estado: "activo" },
+      where: { tenantId: context.tenantId, id: { in: productIds }, estado: "activo" },
     });
-
-    const productoMap = new Map(productosEnDb.map(p => [p.id, p]));
+    const productoMap = new Map(productosEnDb.map((producto) => [producto.id, producto]));
+    if (productoMap.size !== productIds.length) return { success: false, error: "Uno o más productos ya no están disponibles" };
 
     for (const item of items) {
-      const prod = productoMap.get(item.productoId);
-      if (!prod) {
-        return { success: false, error: `El producto con ID ${item.productoId} no existe` };
-      }
-      if (prod.stock < item.cantidad) {
-        return {
-          success: false,
-          error: `Stock insuficiente para "${prod.nombre}". Disponible: ${prod.stock}, solicitado: ${item.cantidad}`,
-        };
+      const producto = productoMap.get(item.productoId)!;
+      if (producto.stock < item.cantidad) {
+        return { success: false, error: `Stock insuficiente para "${producto.nombre}". Disponible: ${producto.stock}` };
       }
     }
 
-    // 2. Calcular total de la venta
     const total = items.reduce((sum, item) => sum + Number(productoMap.get(item.productoId)!.precio) * item.cantidad, 0);
+    if (!Number.isFinite(total) || total <= 0) return { success: false, error: "El total de la venta no es válido" };
 
-    // 3. Validar límite de crédito si es cuenta corriente
-    let cuentaClienteId: number | null = null;
-    if (tipoPago === "cuenta_corriente" && clienteId) {
-      const member = await prisma.cliente.findFirst({ where: { id: clienteId, tenantId: context.tenantId }, select: { id: true } });
-      if (!member) return { success: false, error: "Socio no encontrado" };
-      let cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId: member.id } });
-
-      if (!cuenta) {
-        cuenta = await prisma.cuentaCorriente.create({
-          data: {
-            clienteId,
-            saldo: 0,
-            limiteCredito: 5000,
-          },
-        });
-      }
-
-      cuentaClienteId = cuenta.id;
-      const nuevoSaldo = Number(cuenta.saldo) + total;
-      const limite = Number(cuenta.limiteCredito);
-
-      if (nuevoSaldo > limite) {
-        return {
-          success: false,
-          error: `Límite de crédito excedido. Saldo actual: $${Number(cuenta.saldo).toFixed(2)}, Monto compra: $${total.toFixed(2)}, Límite: $${limite.toFixed(2)} (Excedente: $${(nuevoSaldo - limite).toFixed(2)})`,
-        };
-      }
+    let memberId: number | null = null;
+    if (clienteId) {
+      const member = await prisma.cliente.findFirst({
+        where: {
+          id: clienteId,
+          tenantId: context.tenantId,
+          estado: "activo",
+          sucursales: { some: { id: context.branchId } },
+        },
+        select: { id: true },
+      });
+      if (!member) return { success: false, error: "El socio no pertenece a la sede activa" };
+      memberId = member.id;
     }
 
-    // 4. Ejecutar transacción atómica
     const resultado = await prisma.$transaction(async (tx) => {
-      // a) Crear la Venta
+      let accountId: number | null = null;
+      if (tipoPago === "cuenta_corriente" && memberId) {
+        const account = await tx.cuentaCorriente.findUnique({ where: { clienteId: memberId } });
+        if (!account || Number(account.limiteCredito) <= 0) throw new Error("NO_CREDIT");
+        if (!canChargeCurrentAccount(Number(account.saldo), Number(account.limiteCredito), total)) throw new Error("CREDIT_LIMIT");
+        accountId = account.id;
+      }
+
       const venta = await tx.venta.create({
         data: {
           tenantId: context.tenantId,
-          sucursalId,
-          clienteId: clienteId || null,
+          sucursalId: context.branchId!,
+          clienteId: memberId,
           tipoPago,
           estadoPago: tipoPago === "cuenta_corriente" ? "pendiente" : "pagado",
-          metodoPago: metodoPago || tipoPago,
+          metodoPago: metodoPago?.trim() || tipoPago,
           total,
           userId: context.userId,
-          notas: notas || null,
+          notas: notas?.trim() || null,
         },
       });
 
-      // b) Crear los items de la venta
       for (const item of items) {
+        const producto = productoMap.get(item.productoId)!;
         await tx.ventaItem.create({
           data: {
             ventaId: venta.id,
             productoId: item.productoId,
             cantidad: item.cantidad,
-            precioUnitario: productoMap.get(item.productoId)!.precio,
-            subtotal: Number(productoMap.get(item.productoId)!.precio) * item.cantidad,
+            precioUnitario: producto.precio,
+            subtotal: Number(producto.precio) * item.cantidad,
           },
         });
 
-        // c) Descontar stock
         const stockUpdate = await tx.producto.updateMany({
           where: { id: item.productoId, tenantId: context.tenantId, stock: { gte: item.cantidad } },
-          data: {
-            stock: {
-              decrement: item.cantidad,
-            },
-          },
+          data: { stock: { decrement: item.cantidad } },
         });
-        if (!stockUpdate.count) throw new Error("Stock modificado durante la venta");
+        if (!stockUpdate.count) throw new Error("STOCK_CHANGED");
       }
 
-      // d) Si es cuenta corriente, actualizar saldo y registrar movimiento
-      if (tipoPago === "cuenta_corriente" && clienteId && cuentaClienteId) {
-        await tx.cuentaCorriente.update({
-          where: { id: cuentaClienteId },
-          data: {
-            saldo: {
-              increment: total,
-            },
-          },
-        });
-
+      if (tipoPago === "cuenta_corriente" && memberId && accountId) {
+        await tx.cuentaCorriente.update({ where: { id: accountId }, data: { saldo: { increment: total } } });
         await tx.cuentaMovimiento.create({
           data: {
-            cuentaId: cuentaClienteId,
+            cuentaId: accountId,
             tipo: "cargo",
             monto: total,
-            concepto: `Compra en cantina - Ticket #${venta.id}`,
+            concepto: `Compra en tienda - Ticket #${venta.id}`,
             usuarioAdminId: context.userId,
           },
         });
       }
 
-      // e) Obtener venta completa con relaciones para el ticket
-      return await tx.venta.findUnique({
+      return tx.venta.findUnique({
         where: { id: venta.id },
-        include: {
-          cliente: true,
-          user: true,
-          items: {
-            include: {
-              producto: true,
-            },
-          },
-          sucursal: true,
-        },
+        include: { cliente: true, user: true, items: { include: { producto: true } }, sucursal: true },
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    // 5. Revalidar rutas
     revalidatePath("/dashboard/caja");
     revalidatePath("/dashboard/caja/movimientos");
     revalidatePath("/dashboard/productos");
@@ -292,31 +256,26 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
         tipoPago: resultado!.tipoPago,
         estadoPago: resultado!.estadoPago,
         fechaVenta: resultado!.fechaVenta.toISOString(),
-        cliente: resultado!.cliente
-          ? `${resultado!.cliente.nombre} ${resultado!.cliente.apellido}`
-          : "Consumidor Final",
+        cliente: resultado!.cliente ? `${resultado!.cliente.nombre} ${resultado!.cliente.apellido}` : "Consumidor Final",
         documento: resultado!.cliente?.documento,
         vendedor: resultado!.user?.name || "Cajero",
-        sucursal: resultado!.sucursal?.nombre || "Sede Principal",
-        items: resultado!.items.map(i => ({
-          id: i.id,
-          nombre: i.producto.nombre,
-          codigo: i.producto.codigo,
-          cantidad: i.cantidad,
-          precioUnitario: Number(i.precioUnitario),
-          subtotal: Number(i.subtotal),
+        sucursal: resultado!.sucursal?.nombre || "Sucursal activa",
+        items: resultado!.items.map((item) => ({
+          id: item.id,
+          nombre: item.producto.nombre,
+          codigo: item.producto.codigo,
+          cantidad: item.cantidad,
+          precioUnitario: Number(item.precioUnitario),
+          subtotal: Number(item.subtotal),
         })),
       }),
     };
   } catch (error) {
     console.error("Error al procesar venta POS:", error);
-    return { success: false, error: "Error interno al procesar la venta" };
+    return { success: false, error: expectedPosError(error, "Error interno al procesar la venta") };
   }
 }
 
-/**
- * Obtiene el historial detallado de ventas del POS con filtros y resumen de caja
- */
 export async function getHistorialVentasPOS(params: {
   desde?: string;
   hasta?: string;
@@ -325,43 +284,29 @@ export async function getHistorialVentasPOS(params: {
 }) {
   try {
     const { desde, hasta, sucursalId, tipoPago } = params;
-    const context = await requireStaffContext(sucursalId ? { branchId: sucursalId } : {});
-    const where: any = { tenantId: context.tenantId };
+    const context = await requirePosContext(sucursalId);
+    const where: Prisma.VentaWhereInput = { tenantId: context.tenantId, sucursalId: context.branchId! };
 
     if (desde || hasta) {
       where.fechaVenta = {};
       if (desde) {
-        const d = new Date(desde);
-        d.setHours(0, 0, 0, 0);
-        where.fechaVenta.gte = d;
+        const start = new Date(desde);
+        start.setHours(0, 0, 0, 0);
+        where.fechaVenta.gte = start;
       }
       if (hasta) {
-        const h = new Date(hasta);
-        h.setHours(23, 59, 59, 999);
-        where.fechaVenta.lte = h;
+        const end = new Date(hasta);
+        end.setHours(23, 59, 59, 999);
+        where.fechaVenta.lte = end;
       }
     }
-
-    if (sucursalId) {
-      where.sucursalId = sucursalId;
-    }
-
-    if (tipoPago && tipoPago !== "todos") {
-      where.tipoPago = tipoPago;
-    }
+    if (tipoPago && tipoPago !== "todos") where.tipoPago = tipoPago;
 
     const ventas = await prisma.venta.findMany({
       where,
-      include: {
-        cliente: true,
-        user: true,
-        items: {
-          include: {
-            producto: true,
-          },
-        },
-      },
+      include: { cliente: true, user: true, items: { include: { producto: true } } },
       orderBy: { fechaVenta: "desc" },
+      take: 1000,
     });
 
     let totalEfectivo = 0;
@@ -371,38 +316,36 @@ export async function getHistorialVentasPOS(params: {
     let totalGeneral = 0;
     let totalArticulos = 0;
 
-    const ventasMapeadas = ventas.map(v => {
-      const monto = Number(v.total);
+    const ventasMapeadas = ventas.map((venta) => {
+      const monto = Number(venta.total);
       totalGeneral += monto;
-
-      if (v.tipoPago === "efectivo") totalEfectivo += monto;
-      else if (v.tipoPago === "cuenta_corriente") totalCuentaCorriente += monto;
-      else if (v.tipoPago === "tarjeta") totalTarjeta += monto;
-      else if (v.tipoPago === "transferencia") totalTransferencia += monto;
-
-      const itemsCount = v.items.reduce((acc, it) => acc + it.cantidad, 0);
+      if (venta.tipoPago === "efectivo") totalEfectivo += monto;
+      else if (venta.tipoPago === "cuenta_corriente") totalCuentaCorriente += monto;
+      else if (venta.tipoPago === "tarjeta") totalTarjeta += monto;
+      else if (venta.tipoPago === "transferencia") totalTransferencia += monto;
+      const itemsCount = venta.items.reduce((acc, item) => acc + item.cantidad, 0);
       totalArticulos += itemsCount;
 
       return {
-        id: v.id,
-        fechaVenta: v.fechaVenta.toISOString(),
+        id: venta.id,
+        fechaVenta: venta.fechaVenta.toISOString(),
         total: monto,
-        tipoPago: v.tipoPago,
-        estadoPago: v.estadoPago,
-        metodoPago: v.metodoPago,
-        notas: v.notas,
-        cliente: v.cliente ? `${v.cliente.nombre} ${v.cliente.apellido}` : "Consumidor Final",
-        documentoCliente: v.cliente?.documento || null,
-        clienteId: v.clienteId,
-        vendedor: v.user?.name || "Sistema",
+        tipoPago: venta.tipoPago,
+        estadoPago: venta.estadoPago,
+        metodoPago: venta.metodoPago,
+        notas: venta.notas,
+        cliente: venta.cliente ? `${venta.cliente.nombre} ${venta.cliente.apellido}` : "Consumidor Final",
+        documentoCliente: venta.cliente?.documento || null,
+        clienteId: venta.clienteId,
+        vendedor: venta.user?.name || "Sistema",
         articulosCantidad: itemsCount,
-        items: v.items.map(it => ({
-          id: it.id,
-          nombre: it.producto.nombre,
-          codigo: it.producto.codigo,
-          cantidad: it.cantidad,
-          precioUnitario: Number(it.precioUnitario),
-          subtotal: Number(it.subtotal),
+        items: venta.items.map((item) => ({
+          id: item.id,
+          nombre: item.producto.nombre,
+          codigo: item.producto.codigo,
+          cantidad: item.cantidad,
+          precioUnitario: Number(item.precioUnitario),
+          subtotal: Number(item.subtotal),
         })),
       };
     });
@@ -411,46 +354,23 @@ export async function getHistorialVentasPOS(params: {
       success: true,
       data: serializeData({
         ventas: ventasMapeadas,
-        resumen: {
-          totalGeneral,
-          totalEfectivo,
-          totalCuentaCorriente,
-          totalTarjeta,
-          totalTransferencia,
-          totalVentas: ventas.length,
-          totalArticulos,
-        },
+        resumen: { totalGeneral, totalEfectivo, totalCuentaCorriente, totalTarjeta, totalTransferencia, totalVentas: ventas.length, totalArticulos },
       }),
     };
   } catch (error) {
     console.error("Error al obtener historial de ventas POS:", error);
-    return { success: false, error: "Error al cargar historial de ventas" };
+    return { success: false, error: expectedPosError(error, "Error al cargar historial de ventas") };
   }
 }
 
-/**
- * Obtiene el detalle de un ticket de venta específico
- */
 export async function getDetalleVentaPOS(ventaId: number) {
   try {
-    const context = await requireStaffContext();
+    const context = await requirePosContext();
     const venta = await prisma.venta.findFirst({
-      where: { id: ventaId, tenantId: context.tenantId },
-      include: {
-        cliente: true,
-        user: true,
-        sucursal: true,
-        items: {
-          include: {
-            producto: true,
-          },
-        },
-      },
+      where: { id: ventaId, tenantId: context.tenantId, sucursalId: context.branchId! },
+      include: { cliente: true, user: true, sucursal: true, items: { include: { producto: true } } },
     });
-
-    if (!venta) {
-      return { success: false, error: "Venta no encontrada" };
-    }
+    if (!venta) return { success: false, error: "Venta no encontrada en la sede activa" };
 
     return {
       success: true,
@@ -463,28 +383,23 @@ export async function getDetalleVentaPOS(ventaId: number) {
         metodoPago: venta.metodoPago,
         notas: venta.notas,
         cliente: venta.cliente
-          ? {
-              id: venta.cliente.id,
-              nombre: `${venta.cliente.nombre} ${venta.cliente.apellido}`,
-              documento: venta.cliente.documento,
-              telefono: venta.cliente.telefono,
-            }
+          ? { id: venta.cliente.id, nombre: `${venta.cliente.nombre} ${venta.cliente.apellido}`, documento: venta.cliente.documento, telefono: venta.cliente.telefono }
           : null,
         vendedor: venta.user?.name || "Cajero",
-        sucursal: venta.sucursal?.nombre || "Sede Principal",
-        items: venta.items.map(i => ({
-          id: i.id,
-          nombre: i.producto.nombre,
-          codigo: i.producto.codigo,
-          categoria: i.producto.categoria,
-          cantidad: i.cantidad,
-          precioUnitario: Number(i.precioUnitario),
-          subtotal: Number(i.subtotal),
+        sucursal: venta.sucursal?.nombre || "Sucursal activa",
+        items: venta.items.map((item) => ({
+          id: item.id,
+          nombre: item.producto.nombre,
+          codigo: item.producto.codigo,
+          categoria: item.producto.categoria,
+          cantidad: item.cantidad,
+          precioUnitario: Number(item.precioUnitario),
+          subtotal: Number(item.subtotal),
         })),
       }),
     };
   } catch (error) {
     console.error("Error obteniendo detalle de venta:", error);
-    return { success: false, error: "Error al cargar detalle del ticket" };
+    return { success: false, error: expectedPosError(error, "Error al cargar detalle del ticket") };
   }
 }
