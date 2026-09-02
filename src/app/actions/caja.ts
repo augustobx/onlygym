@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
+import { RolTenant } from "@prisma/client";
 
 const PAYMENT_METHODS = ["efectivo", "tarjeta", "transferencia"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+const BILLING_ROLES = [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION];
 
 function validPaymentMethod(value: string): value is PaymentMethod {
   return PAYMENT_METHODS.includes(value as PaymentMethod);
@@ -14,7 +16,7 @@ function validPaymentMethod(value: string): value is PaymentMethod {
 
 export async function searchClientes(query: string, sucursalId: number) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId });
+    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
     await requireTenantModule(context.tenantId, "membresias");
     const cleanQuery = query.trim();
     if (cleanQuery.length < 2) return { success: true, data: [] };
@@ -30,24 +32,17 @@ export async function searchClientes(query: string, sucursalId: number) {
           { apellido: { contains: cleanQuery, mode: "insensitive" } },
         ],
       },
-      include: {
-        pagos: {
-          orderBy: { fechaVencimiento: "desc" },
-          take: 1,
-        },
-      },
+      include: { pagos: { orderBy: { fechaVencimiento: "desc" }, take: 1 } },
       orderBy: [{ nombre: "asc" }, { apellido: "asc" }],
       take: 10,
     });
 
     return {
       success: true,
-      data: serializeData(
-        clientes.map((cliente) => ({
-          ...cliente,
-          pagos: cliente.pagos.map((pago) => ({ ...pago, monto: Number(pago.monto) })),
-        })),
-      ),
+      data: serializeData(clientes.map((cliente) => ({
+        ...cliente,
+        pagos: cliente.pagos.map((pago) => ({ ...pago, monto: Number(pago.monto) })),
+      }))),
     };
   } catch {
     return { success: false, error: "Error buscando socios" };
@@ -56,7 +51,7 @@ export async function searchClientes(query: string, sucursalId: number) {
 
 export async function getClienteParaCobro(clienteId: number, sucursalId: number) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId });
+    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
     await requireTenantModule(context.tenantId, "membresias");
 
     const cliente = await prisma.cliente.findFirst({
@@ -85,10 +80,7 @@ export async function getClienteParaCobro(clienteId: number, sucursalId: number)
         apellido: cliente.apellido,
         documento: cliente.documento,
         ultimoPago: cliente.pagos[0]
-          ? {
-              ...cliente.pagos[0],
-              monto: Number(cliente.pagos[0].monto),
-            }
+          ? { ...cliente.pagos[0], monto: Number(cliente.pagos[0].monto) }
           : null,
       }),
     };
@@ -107,12 +99,10 @@ export async function getMembresiasDisponibles() {
     });
     return {
       success: true,
-      data: serializeData(
-        membresias.map((membresia) => ({
-          ...membresia,
-          precio: Number(membresia.precio),
-        })),
-      ),
+      data: serializeData(membresias.map((membresia) => ({
+        ...membresia,
+        precio: Number(membresia.precio),
+      }))),
     };
   } catch {
     return { success: false, error: "Error cargando membresías" };
@@ -128,13 +118,11 @@ export async function registrarPago(data: {
   notas?: string;
 }) {
   try {
-    const context = await requireStaffContext({ branchId: data.sucursalId });
+    const context = await requireStaffContext({ branchId: data.sucursalId, roles: BILLING_ROLES });
     await requireTenantModule(context.tenantId, "membresias");
 
     const [membresia, cliente] = await Promise.all([
-      prisma.membresia.findFirst({
-        where: { id: data.membresiaId, tenantId: context.tenantId, estado: "activo" },
-      }),
+      prisma.membresia.findFirst({ where: { id: data.membresiaId, tenantId: context.tenantId, estado: "activo" } }),
       prisma.cliente.findFirst({
         where: {
           id: data.clienteId,
@@ -158,13 +146,10 @@ export async function registrarPago(data: {
       orderBy: { fechaVencimiento: "desc" },
     });
 
-    const fechaInicioBase = ultimoPago && ultimoPago.fechaVencimiento > fechaActual
-      ? ultimoPago.fechaVencimiento
-      : fechaActual;
+    const fechaInicioBase = ultimoPago && ultimoPago.fechaVencimiento > fechaActual ? ultimoPago.fechaVencimiento : fechaActual;
     const fechaVencimiento = new Date(fechaInicioBase);
     fechaVencimiento.setDate(fechaVencimiento.getDate() + membresia.diasDuracion);
 
-    // El precio se toma siempre del plan en servidor. Evita montos alterados desde el cliente.
     const montoFinal = Number(membresia.precio);
     const pago = await prisma.pago.create({
       data: {
@@ -190,13 +175,7 @@ export async function registrarPago(data: {
     revalidatePath(`/dashboard/clientes/${data.clienteId}`);
     revalidatePath("/portal/dashboard");
 
-    return {
-      success: true,
-      data: serializeData({
-        ...pago,
-        monto: Number(pago.monto),
-      }),
-    };
+    return { success: true, data: serializeData({ ...pago, monto: Number(pago.monto) }) };
   } catch (error) {
     console.error("Error registrando pago:", error);
     return { success: false, error: "Error registrando el cobro" };
@@ -205,33 +184,24 @@ export async function registrarPago(data: {
 
 export async function getMovimientosHoy(sucursalId: number) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId });
+    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
     await requireTenantModule(context.tenantId, "membresias");
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const pagos = await prisma.pago.findMany({
-      where: {
-        tenantId: context.tenantId,
-        sucursalId: context.branchId,
-        fechaPago: { gte: hoy },
-      },
-      include: {
-        cliente: true,
-        membresia: true,
-      },
+      where: { tenantId: context.tenantId, sucursalId: context.branchId, fechaPago: { gte: hoy } },
+      include: { cliente: true, membresia: true },
       orderBy: { fechaPago: "desc" },
     });
 
     return {
       success: true,
-      data: serializeData(
-        pagos.map((pago) => ({
-          ...pago,
-          monto: Number(pago.monto),
-          membresia: pago.membresia ? { ...pago.membresia, precio: Number(pago.membresia.precio) } : null,
-        })),
-      ),
+      data: serializeData(pagos.map((pago) => ({
+        ...pago,
+        monto: Number(pago.monto),
+        membresia: pago.membresia ? { ...pago.membresia, precio: Number(pago.membresia.precio) } : null,
+      }))),
     };
   } catch {
     return { success: false, error: "Error cargando cobros" };
