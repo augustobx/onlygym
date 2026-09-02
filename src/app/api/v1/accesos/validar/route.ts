@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     const cliente = await prisma.cliente.findFirst({
       where: { tenantId: sucursal.tenantId, documento, sucursales: { some: { id: sucursalId } } },
-      include: { pagos: { orderBy: { fechaVencimiento: "desc" }, take: 1 } },
+      include: { pagos: { where: { tenantId: sucursal.tenantId }, orderBy: { fechaVencimiento: "desc" }, take: 1 } },
     });
 
     if (!cliente) {
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const horario = await checkBranchSchedule(sucursalId);
+    const horario = await checkBranchSchedule(sucursal.tenantId, sucursalId);
     if (!horario.permitido) {
       await prisma.ingreso.create({
         data: {
@@ -138,11 +138,16 @@ export async function POST(req: Request) {
             tenantId: sucursal.tenantId,
             clienteId: cliente.id,
             estado: "confirmada",
-            clase: { inicio: { gte: new Date(Date.now() - 30 * 60000), lte: new Date(Date.now() + 90 * 60000) }, sucursalId },
+            clase: { tenantId: sucursal.tenantId, inicio: { gte: new Date(Date.now() - 30 * 60000), lte: new Date(Date.now() + 90 * 60000) }, sucursalId },
           },
           orderBy: { clase: { inicio: "asc" } },
         });
-        if (classBooking) await tx.reservaClase.update({ where: { id: classBooking.id }, data: { estado: "asistio", asistenciaEn: new Date() } });
+        if (classBooking) {
+          await tx.reservaClase.updateMany({
+            where: { id: classBooking.id, tenantId: sucursal.tenantId },
+            data: { estado: "asistio", asistenciaEn: new Date() },
+          });
+        }
       }
       if (autorizado && !alreadyAwarded && modules.puntos) {
         await tx.movimientoPuntos.create({
