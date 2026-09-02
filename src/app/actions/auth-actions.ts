@@ -42,9 +42,7 @@ export async function seleccionarGimnasioActivo(tenantId: number) {
 }
 
 export async function getMisSucursales() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await auth.api.getSession({ headers: await headers() });
 
   if (!session?.user) {
     return { success: false, error: "No autenticado" };
@@ -82,7 +80,31 @@ export async function seleccionarSucursalActiva(sucursalId: number) {
 export async function getStaffNavigationContext() {
   try {
     const context = await requireStaffContext();
-    const [modules, user] = await Promise.all([getTenantModules(context.tenantId), prisma.user.findUnique({ where: { id: context.userId }, select: { name: true } })]);
-    return { success: true, data: { name: user?.name || "Usuario", role: context.role, modules, tenantId: context.tenantId, tenantSlug: context.tenantSlug, tenantName: context.tenantName } };
-  } catch { return { success: false as const }; }
+    const [modules, user, branch] = await Promise.all([
+      getTenantModules(context.tenantId),
+      prisma.user.findUnique({ where: { id: context.userId }, select: { name: true } }),
+      context.branchId
+        ? prisma.sucursal.findFirst({
+            where: { id: context.branchId, tenantId: context.tenantId, estado: "activo" },
+            select: { id: true, nombre: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        name: user?.name || "Usuario",
+        role: context.role,
+        modules,
+        tenantId: context.tenantId,
+        tenantSlug: context.tenantSlug,
+        tenantName: context.tenantName,
+        branchId: branch?.id ?? null,
+        branchName: branch?.nombre ?? null,
+      },
+    };
+  } catch {
+    return { success: false as const };
+  }
 }
