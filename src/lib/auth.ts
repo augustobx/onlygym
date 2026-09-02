@@ -16,6 +16,10 @@ const configuredOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+const tenantBaseDomain = (process.env.TENANT_BASE_DOMAIN || "")
+    .trim()
+    .replace(/^\.+/, "");
+
 export const auth = betterAuth({
     baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     secret: getAuthSecret(),
@@ -31,8 +35,11 @@ export const auth = betterAuth({
         "http://localhost:3000",
         "http://127.0.0.1:3000"
     ],
-    advanced: { 
-        crossSubDomainCookies: { enabled: true },
+    advanced: {
+        crossSubDomainCookies: {
+            enabled: true,
+            ...(tenantBaseDomain ? { domain: `.${tenantBaseDomain}` } : {}),
+        },
         useSecureCookies: process.env.NODE_ENV === "production"
     },
     database: prismaAdapter(prisma, {
