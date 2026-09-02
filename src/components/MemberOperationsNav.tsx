@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, Receipt, Users } from "lucide-react";
+import { CreditCard, Gift, Receipt, Users } from "lucide-react";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
 
-const items = [
+const baseItems = [
   { href: "/dashboard/clientes", label: "Socios", icon: Users },
   { href: "/dashboard/pagos", label: "Cobros", icon: CreditCard },
   { href: "/dashboard/cuentas", label: "Cuentas corrientes", icon: Receipt },
@@ -12,6 +14,19 @@ const items = [
 
 export default function MemberOperationsNav() {
   const pathname = usePathname();
+  const [showBenefits, setShowBenefits] = useState(false);
+
+  useEffect(() => {
+    void getStaffNavigationContext().then((result) => {
+      if (!result.success || !result.data) return;
+      setShowBenefits(["OWNER", "ADMIN"].includes(result.data.role) && result.data.modules.puntos !== false);
+    });
+  }, []);
+
+  const items = showBenefits
+    ? [...baseItems, { href: "/dashboard/recompensas", label: "Beneficios", icon: Gift }]
+    : baseItems;
+
   return (
     <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-100/80 p-1" aria-label="Gestión de socios">
       {items.map(({ href, label, icon: Icon }) => {
