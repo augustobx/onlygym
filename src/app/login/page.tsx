@@ -33,7 +33,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/seleccionar-gimnasio");
+      // El dominio ya identifica un único tenant. Después del login sólo falta elegir la sede operativa.
+      router.replace("/seleccionar-sucursal");
     } catch {
       setError("Error de conexión con el servidor");
       setLoading(false);
@@ -48,7 +49,7 @@ export default function LoginPage() {
         </div>
         <div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">OnlyGym</h2>
-          <p className="text-xs text-slate-400 font-semibold mt-1">Acceso Administrativo & Personal de Sede</p>
+          <p className="text-xs text-slate-400 font-semibold mt-1">Acceso al equipo del gimnasio</p>
         </div>
       </div>
 
@@ -95,7 +96,7 @@ export default function LoginPage() {
             </div>
 
             <button type="submit" disabled={loading} className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-cyan-950/40 transition active:scale-98 disabled:opacity-50">
-              {loading ? "Verificando..." : "Ingresar al Panel"}
+              {loading ? "Verificando..." : "Ingresar"}
             </button>
             <Link href="/recuperar-password" className="block text-center text-xs font-bold text-cyan-400 hover:text-cyan-300">¿Olvidaste tu contraseña?</Link>
           </form>
