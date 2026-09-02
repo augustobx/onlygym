@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/auth/sign-in/email", {
+      const res = await fetch("/api/tenant-auth/sign-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
