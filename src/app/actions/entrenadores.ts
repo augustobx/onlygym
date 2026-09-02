@@ -63,8 +63,67 @@ export async function crearEntrenador(input: z.input<typeof createTrainerSchema>
       return tx.perfilEntrenador.create({ data: { tenantId: context.tenantId, userId: user.id, bio: data.bio || null, foto: data.foto || null, especialidades: [...new Set(data.especialidades)], horarios: data.horarios as Prisma.InputJsonValue, estado: "activo", sucursales: { connect: branches.map(({ id }) => ({ id })) } }, include: { user: { select: { name: true, email: true, username: true } }, sucursales: true } });
     });
     await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "entrenador.crear", entidad: "PerfilEntrenador", entidadId: trainer.id, metadata: { sucursalIds: branches.map(({ id }) => id), especialidades: data.especialidades } });
-    return { success: true, data: serializeData(trainer), temporaryPassword: passwordText };
+    return {
+      success: true,
+      data: serializeData(trainer),
+      temporaryPassword: passwordText,
+      credentials: { name: trainer.user.name, email: trainer.user.email, username: trainer.user.username, password: passwordText },
+    };
   } catch (error) { return { success: false, error: (error as { code?: string }).code === "P2002" ? "El email o usuario ya está registrado" : error instanceof Error ? error.message : "No se pudo crear el entrenador" }; }
+}
+
+export async function regenerarAccesoEntrenador(trainerId: number) {
+  try {
+    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const id = z.number().int().positive().parse(trainerId);
+    const profile = await prisma.perfilEntrenador.findFirst({
+      where: { id, tenantId: context.tenantId },
+      select: {
+        id: true,
+        userId: true,
+        user: {
+          select: {
+            name: true,
+            email: true,
+            username: true,
+            _count: { select: { tenantMemberships: true } },
+          },
+        },
+      },
+    });
+    if (!profile) return { success: false, error: "Entrenador no encontrado" };
+    if (profile.user._count.tenantMemberships > 1) {
+      return { success: false, error: "Este usuario pertenece a más de un gimnasio. Su clave global no puede regenerarse desde un tenant." };
+    }
+
+    const passwordText = temporaryPassword();
+    const password = await hashPassword(passwordText);
+    const updated = await prisma.account.updateMany({
+      where: { userId: profile.userId, providerId: "credential" },
+      data: { password },
+    });
+    if (!updated.count) return { success: false, error: "No se encontró una credencial local para este entrenador" };
+
+    await writeAudit({
+      tenantId: context.tenantId,
+      actorUserId: context.userId,
+      accion: "entrenador.regenerar_acceso",
+      entidad: "PerfilEntrenador",
+      entidadId: id,
+    });
+
+    return {
+      success: true,
+      credentials: {
+        name: profile.user.name,
+        email: profile.user.email,
+        username: profile.user.username,
+        password: passwordText,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "No se pudo regenerar el acceso" };
+  }
 }
 
 export async function actualizarEntrenador(trainerId: number, input: z.input<typeof trainerProfileSchema>) {
@@ -110,10 +169,18 @@ export async function asignarSociosEntrenador(trainerId: number, memberIds: numb
   try {
     const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] }); const id = z.number().int().positive().parse(trainerId); const ids = z.array(z.number().int().positive()).max(500).parse(memberIds); const unique = [...new Set(ids)];
     const [trainer, ownedMembers] = await Promise.all([
-      prisma.perfilEntrenador.findFirst({ where: { id, tenantId: context.tenantId, estado: "activo" }, select: { id: true } }),
-      prisma.cliente.findMany({ where: { tenantId: context.tenantId, id: { in: unique }, estado: "activo" }, select: { id: true } }),
+      prisma.perfilEntrenador.findFirst({ where: { id, tenantId: context.tenantId, estado: "activo" }, select: { id: true, sucursales: { select: { id: true } } } }),
+      prisma.cliente.findMany({ where: { tenantId: context.tenantId, id: { in: unique }, estado: "activo" }, select: { id: true, sucursales: { select: { id: true } } } }),
     ]);
-    if (!trainer) return { success: false, error: "Entrenador no disponible" }; if (ownedMembers.length !== unique.length) return { success: false, error: "Uno o más socios no pertenecen al gimnasio" };
+    if (!trainer) return { success: false, error: "Entrenador no disponible" };
+    if (ownedMembers.length !== unique.length) return { success: false, error: "Uno o más socios no pertenecen al gimnasio" };
+
+    const trainerBranchIds = new Set(trainer.sucursales.map(({ id: branchId }) => branchId));
+    const outsideTrainerBranches = ownedMembers.filter((member) => !member.sucursales.some(({ id: branchId }) => trainerBranchIds.has(branchId)));
+    if (outsideTrainerBranches.length) {
+      return { success: false, error: "Uno o más socios no comparten ninguna sede con el entrenador" };
+    }
+
     const previous = await prisma.cliente.findMany({ where: { tenantId: context.tenantId, entrenadorId: id }, select: { id: true } }); const previousIds = previous.map(({ id: memberId }) => memberId);
     await prisma.$transaction([
       prisma.cliente.updateMany({ where: { tenantId: context.tenantId, entrenadorId: id, id: { notIn: unique } }, data: { entrenadorId: null } }),
