@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { username } from "better-auth/plugins";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { writeAudit } from "@/lib/audit";
@@ -40,6 +42,19 @@ export const auth = betterAuth({
         enabled: true,
         revokeSessionsOnPasswordReset: true,
         resetPasswordTokenExpiresIn: 60 * 60,
+        password: {
+            // Better Auth usa su hash nativo para toda credencial nueva.
+            hash: async (password) => hashPassword(password),
+            // Compatibilidad transitoria: los primeros admins creados desde
+            // SuperAdmin quedaron con bcrypt. Permitimos ambos formatos para
+            // no bloquear tenants existentes y migrarlos al próximo cambio de clave.
+            verify: async ({ hash, password }) => {
+                if (hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$")) {
+                    return bcrypt.compare(password, hash);
+                }
+                return verifyPassword({ hash, password });
+            },
+        },
         sendResetPassword: async ({ user, url }, request) => {
             await sendPasswordResetEmail({ email: user.email, name: user.name, url });
             const memberships = await prisma.tenantUsuario.findMany({ where: { userId: user.id, estado: "activo" }, select: { tenantId: true } });
