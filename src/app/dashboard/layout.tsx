@@ -54,16 +54,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     void getStaffNavigationContext().then((result) => {
-      const storedBranchName = localStorage.getItem("activeSucursalName");
-      if (storedBranchName) setSucursalNombre(storedBranchName);
-      if (result.success && result.data) {
-        setUserName(result.data.name);
-        setUserRole(result.data.role);
-        setModules(result.data.modules);
-        setTenantName(result.data.tenantName);
-      } else {
+      if (!result.success || !result.data) {
+        localStorage.removeItem("activeSucursalId");
+        localStorage.removeItem("activeSucursalName");
         router.replace("/login");
+        return;
       }
+
+      setUserName(result.data.name);
+      setUserRole(result.data.role);
+      setModules(result.data.modules);
+      setTenantName(result.data.tenantName);
+
+      if (!result.data.branchId || !result.data.branchName) {
+        localStorage.removeItem("activeSucursalId");
+        localStorage.removeItem("activeSucursalName");
+        router.replace("/seleccionar-sucursal");
+        return;
+      }
+
+      setSucursalNombre(result.data.branchName);
+      localStorage.setItem("activeSucursalId", String(result.data.branchId));
+      localStorage.setItem("activeSucursalName", result.data.branchName);
     });
   }, [router]);
 
@@ -88,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { key: "inicio", href: "/dashboard", label: "Resumen", description: "Lo importante de la sede hoy", icon: LayoutDashboard },
     ...(userRole === "ENTRENADOR" ? [{ key: "entrenador" as const, href: "/dashboard/entrenador", label: "Mi trabajo", description: "Socios y tareas asignadas", icon: UserCheck }] : []),
     ...(canOperate && moduleEnabled("socios") ? [{ key: "socios" as const, href: "/dashboard/clientes", label: "Socios", description: "Altas, membresías, cobros y cuentas", icon: Users }] : []),
-    ...(hasTraining ? [{ key: "entrenamiento" as const, href: "/dashboard/entrenamiento", label: "Entrenamiento", description: "Planificación, clases y progreso", icon: Dumbbell }] : []),
+    ...(hasTraining ? [{ key: "entrenamiento" as const, href: "/dashboard/entrenamiento", label: "Entrenamiento", description: "Rutinas, clases, entrenadores y progreso", icon: Dumbbell }] : []),
     ...(canOperate && moduleEnabled("caja") ? [{ key: "operacion" as const, href: "/dashboard/caja", label: "Operación", description: "Ventas, stock, aforo y caja", icon: ShoppingCart }] : []),
     ...(canManage ? [{ key: "gestion" as const, href: "/dashboard/reportes", label: "Gestión", description: "Reportes, personal y configuración", icon: Building2 }] : []),
   ];
