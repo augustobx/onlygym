@@ -70,23 +70,28 @@ export async function actualizarAdminTenantSuperAdmin(input: z.input<typeof admi
             where: { id: credentialAccount.id },
             data: {
               password: passwordHash,
-              accountId: data.email,
+              accountId: data.userId,
+              issuer: "local:credential",
             },
           });
         } else {
           await tx.account.create({
             data: {
-              accountId: data.email,
+              accountId: data.userId,
               providerId: "credential",
               userId: data.userId,
               password: passwordHash,
+              issuer: "local:credential",
             },
           });
         }
       } else if (credentialAccount) {
         await tx.account.update({
           where: { id: credentialAccount.id },
-          data: { accountId: data.email },
+          data: {
+            accountId: data.userId,
+            issuer: "local:credential",
+          },
         });
       }
 
