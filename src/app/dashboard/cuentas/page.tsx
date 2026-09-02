@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  getAccountOperationsContext,
   getCuentas,
   getMovimientosCuenta,
   registrarCargoCuenta,
@@ -48,6 +49,7 @@ export default function CuentasCorrientesPage() {
   const [concept, setConcept] = useState("");
   const [processing, setProcessing] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [canSetCreditLimit, setCanSetCreditLimit] = useState(false);
 
   const loadMovements = async (clienteId: number) => {
     const result = await getMovimientosCuenta(clienteId);
@@ -67,6 +69,10 @@ export default function CuentasCorrientesPage() {
         if (account) {
           setSelected(account);
           await loadMovements(account.clienteId);
+        } else if (preferredClienteId) {
+          setSelected(null);
+          setMovimientos([]);
+          setNotice({ type: "error", text: "Ese socio no tiene una cuenta accesible desde tu sede activa." });
         }
       }
     } else {
@@ -78,6 +84,9 @@ export default function CuentasCorrientesPage() {
   useEffect(() => {
     const clienteId = Number(new URLSearchParams(window.location.search).get("clienteId") || 0);
     if (Number.isInteger(clienteId) && clienteId > 0) setFilter("todos");
+    void getAccountOperationsContext().then((result) => {
+      if (result.success && result.data) setCanSetCreditLimit(Boolean(result.data.canSetCreditLimit));
+    });
     void loadAccounts(clienteId > 0 ? clienteId : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -103,7 +112,7 @@ export default function CuentasCorrientesPage() {
   }, [cuentas, filter, search]);
 
   const openModal = (type: Exclude<Modal, null>) => {
-    if (!selected) return;
+    if (!selected || (type === "limite" && !canSetCreditLimit)) return;
     setModal(type);
     setConcept("");
     setAmount(type === "limite" ? String(Number(selected.limiteCredito || 0)) : "");
@@ -112,6 +121,12 @@ export default function CuentasCorrientesPage() {
 
   const processOperation = async () => {
     if (!selected || !modal) return;
+    if (modal === "limite" && !canSetCreditLimit) {
+      setNotice({ type: "error", text: "Tu rol no permite modificar límites de crédito." });
+      setModal(null);
+      return;
+    }
+
     const numericAmount = Number(amount);
     if (!Number.isFinite(numericAmount) || numericAmount < 0 || (modal !== "limite" && numericAmount <= 0)) {
       setNotice({ type: "error", text: "Ingresá un monto válido." });
@@ -147,14 +162,14 @@ export default function CuentasCorrientesPage() {
 
       <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700">Socios · Finanzas</p><h1 className="mt-1 flex items-center gap-2 text-xl font-black text-slate-950"><Receipt className="h-5 w-5 text-cyan-700" />Cuentas corrientes</h1><p className="mt-1 text-xs font-medium text-slate-500">Deudas de consumos, abonos y límites de crédito. La membresía se cobra por separado.</p></div>
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700">Socios · Finanzas</p><h1 className="mt-1 flex items-center gap-2 text-xl font-black text-slate-950"><Receipt className="h-5 w-5 text-cyan-700" />Cuentas corrientes</h1><p className="mt-1 text-xs font-medium text-slate-500">Deudas de consumos, abonos y límites de crédito. Recepción trabaja sólo con socios de la sede activa.</p></div>
           <Link href="/dashboard/pagos" className="inline-flex items-center gap-1.5 self-start rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-800 hover:bg-slate-50"><CreditCard className="h-3.5 w-3.5" />Ir a cobros</Link>
         </div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Kpi label="Deuda total" value={money(totalDebt)} detail={`${debtors} socios con saldo`} />
-        <Kpi label="Cuentas activas" value={String(cuentas.length)} detail="Socios con cuenta corriente" />
+        <Kpi label="Cuentas activas" value={String(cuentas.length)} detail="Socios visibles en tu alcance" />
         <Kpi label="Límite excedido" value={String(exceeded)} detail={exceeded ? "Requieren revisión" : "Sin alertas"} alert={exceeded > 0} />
       </section>
 
@@ -166,12 +181,12 @@ export default function CuentasCorrientesPage() {
             <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="DNI, nombre o apellido" className="h-9 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-xs font-medium outline-none focus:border-cyan-500" /></div>
             <select value={filter} onChange={(event) => setFilter(event.target.value)} className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 outline-none"><option value="todos">Todas las cuentas</option><option value="con_deuda">Con deuda</option><option value="sin_deuda">Sin deuda</option><option value="excedido">Límite excedido</option></select>
           </div>
-          <div className="max-h-[590px] overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-[590px] divide-y divide-slate-100 overflow-y-auto">
             {loading ? <p className="p-8 text-center text-xs font-semibold text-slate-500">Cargando cuentas…</p> : filtered.length === 0 ? <p className="p-8 text-center text-xs font-semibold text-slate-500">No hay cuentas para este filtro.</p> : filtered.map((account) => {
               const balance = Number(account.saldo || 0);
               const limit = Number(account.limiteCredito || 0);
               const active = selected?.id === account.id;
-              return <button key={account.id} onClick={() => void selectAccount(account)} className={`w-full border-l-2 px-4 py-3 text-left transition ${active ? "border-cyan-600 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black text-slate-950">{account.cliente?.nombre} {account.cliente?.apellido}</p><p className="mt-0.5 text-[10px] font-mono font-semibold text-slate-500">DNI {account.cliente?.documento}</p></div><div className="shrink-0 text-right"><p className={`font-mono text-sm font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{money(balance)}</p><p className={`mt-0.5 text-[9px] font-bold ${balance > limit ? "text-rose-600" : "text-slate-400"}`}>{balance > limit ? "LÍMITE EXCEDIDO" : `Límite ${money(limit)}`}</p></div></div></button>;
+              return <button key={account.id} onClick={() => void selectAccount(account)} className={`w-full border-l-2 px-4 py-3 text-left transition ${active ? "border-cyan-600 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black text-slate-950">{account.cliente?.nombre} {account.cliente?.apellido}</p><p className="mt-0.5 text-[10px] font-mono font-semibold text-slate-500">DNI {account.cliente?.documento}</p></div><div className="shrink-0 text-right"><p className={`font-mono text-sm font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{money(balance)}</p><p className={`mt-0.5 text-[9px] font-bold ${balance > limit ? "text-rose-600" : "text-slate-400"}`}>{balance > limit ? "LÍMITE EXCEDIDO" : limit > 0 ? `Límite ${money(limit)}` : "Sin crédito"}</p></div></div></button>;
             })}
           </div>
         </section>
@@ -184,9 +199,9 @@ export default function CuentasCorrientesPage() {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cuenta seleccionada</p><h2 className="mt-1 text-lg font-black text-slate-950">{selected.cliente?.nombre} {selected.cliente?.apellido}</h2><p className="text-xs font-mono font-semibold text-slate-500">DNI {selected.cliente?.documento}</p><div className="mt-3 flex flex-wrap gap-2"><Link href={`/dashboard/clientes/${selected.clienteId}`} className="text-xs font-black text-cyan-700 hover:underline">Abrir ficha</Link><span className="text-slate-300">·</span><Link href={`/dashboard/pagos?clienteId=${selected.clienteId}`} className="text-xs font-black text-cyan-700 hover:underline">Cobrar membresía</Link></div></div>
-                  <div className="min-w-52 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:text-right"><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Saldo deudor</p><p className={`mt-1 font-mono text-2xl font-black ${Number(selected.saldo) > 0 ? "text-rose-700" : "text-emerald-700"}`}>{money(selected.saldo)}</p><p className="mt-1 text-[10px] font-bold text-slate-500">Límite {money(selected.limiteCredito)}</p></div>
+                  <div className="min-w-52 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:text-right"><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Saldo deudor</p><p className={`mt-1 font-mono text-2xl font-black ${Number(selected.saldo) > 0 ? "text-rose-700" : "text-emerald-700"}`}>{money(selected.saldo)}</p><p className="mt-1 text-[10px] font-bold text-slate-500">{Number(selected.limiteCredito) > 0 ? `Límite ${money(selected.limiteCredito)}` : "Crédito no habilitado"}</p></div>
                 </div>
-                <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3"><button onClick={() => openModal("pago")} disabled={Number(selected.saldo) <= 0} className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs font-black text-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"><ArrowDownRight className="h-3.5 w-3.5" />Registrar abono</button><button onClick={() => openModal("cargo")} className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-black text-rose-800"><ArrowUpRight className="h-3.5 w-3.5" />Registrar cargo</button><button onClick={() => openModal("limite")} className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-black text-slate-800"><Settings className="h-3.5 w-3.5" />Ajustar límite</button></div>
+                <div className={`mt-4 grid gap-2 border-t border-slate-100 pt-4 ${canSetCreditLimit ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}><button onClick={() => openModal("pago")} disabled={Number(selected.saldo) <= 0} className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs font-black text-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"><ArrowDownRight className="h-3.5 w-3.5" />Registrar abono</button><button onClick={() => openModal("cargo")} disabled={Number(selected.limiteCredito) <= 0} className="flex items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-black text-rose-800 disabled:cursor-not-allowed disabled:opacity-40"><ArrowUpRight className="h-3.5 w-3.5" />Registrar cargo</button>{canSetCreditLimit && <button onClick={() => openModal("limite")} className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-black text-slate-800"><Settings className="h-3.5 w-3.5" />Ajustar límite</button>}</div>
               </div>
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs">
