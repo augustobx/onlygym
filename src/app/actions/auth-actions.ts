@@ -4,12 +4,24 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getTenantModules, requireStaffContext, setActiveBranchCookie, setActiveTenantCookie } from "@/lib/tenant-context";
+import { getRequestTenantSlug } from "@/lib/request-tenant";
 
 export async function getMisGimnasios() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return { success: false, error: "No autenticado" };
+
+  const requestTenantSlug = await getRequestTenantSlug();
+  if (!requestTenantSlug) return { success: false, error: "Dominio de gimnasio inválido" };
+
   const memberships = await prisma.tenantUsuario.findMany({
-    where: { userId: session.user.id, estado: "activo", tenant: { estado: { in: ["activo", "prueba"] } } },
+    where: {
+      userId: session.user.id,
+      estado: "activo",
+      tenant: {
+        slug: requestTenantSlug,
+        estado: { in: ["activo", "prueba"] },
+      },
+    },
     include: { tenant: { select: { id: true, nombre: true, slug: true, plan: true } } },
     orderBy: { tenant: { nombre: "asc" } },
   });
