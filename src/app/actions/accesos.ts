@@ -27,8 +27,8 @@ export async function registrarIngresoMolinete(documento: string, sucursalId: nu
       return { success: false, estado: "INACTIVO", error: "El cliente está inactivo o bloqueado." };
     }
 
-    // Verificar horario de atención del gimnasio
-    const horario = await checkBranchSchedule(sucursalId);
+    // Verificar horario de atención de la sucursal dentro del tenant autenticado.
+    const horario = await checkBranchSchedule(context.tenantId, sucursalId);
     if (!horario.permitido) {
       await prisma.ingreso.create({
         data: {
@@ -77,58 +77,35 @@ export async function registrarIngresoMolinete(documento: string, sucursalId: nu
     const visitaPuntuada = estadoAcceso === "ACTIVO" ? await prisma.ingreso.findFirst({ where: { tenantId: context.tenantId, clienteId: cliente.id, estado: "ACTIVO", fechaHora: { gte: inicioDia } }, select: { id: true } }) : null;
     const modules = await getTenantModules(context.tenantId);
     const ingreso = await prisma.$transaction(async (tx) => {
-      const created = await tx.ingreso.create({ data: {
-        tenantId: context.tenantId,
-        clienteId: cliente.id,
-        sucursalId: sucursalId,
-        documento: cliente.documento,
-        estado: estadoAcceso,
-        motivo: estadoAcceso === "ACTIVO" ? "Ingreso regular" : mensaje,
-        diasVencido: diasVencido
-      } });
+      const created = await tx.ingreso.create({ data: { tenantId: context.tenantId, clienteId: cliente.id, sucursalId, documento: cliente.documento, estado: estadoAcceso, motivo: estadoAcceso === "ACTIVO" ? "Ingreso regular" : mensaje, diasVencido } });
       if (estadoAcceso === "ACTIVO") {
         const classBooking = await tx.reservaClase.findFirst({ where: { tenantId: context.tenantId, clienteId: cliente.id, estado: "confirmada", clase: { inicio: { gte: new Date(Date.now() - 30 * 60000), lte: new Date(Date.now() + 90 * 60000) }, sucursalId } }, orderBy: { clase: { inicio: "asc" } } });
         if (classBooking) await tx.reservaClase.update({ where: { id: classBooking.id }, data: { estado: "asistio", asistenciaEn: new Date() } });
       }
-      if (estadoAcceso === "ACTIVO" && !visitaPuntuada && modules.puntos) await tx.movimientoPuntos.create({ data: { tenantId: context.tenantId, clienteId: cliente.id, puntos: 10, tipo: "asistencia", concepto: "Visita al gimnasio", referencia: `ingreso:${created.id}` } });
+      if (estadoAcceso === "ACTIVO" && !visitaPuntuada && modules.puntos) {
+        await tx.movimientoPuntos.create({ data: { tenantId: context.tenantId, clienteId: cliente.id, puntos: 10, tipo: "asistencia", concepto: "Visita al gimnasio", referencia: `ingreso:${created.id}` } });
+      }
       return created;
     });
 
-    // Devolvemos el resultado a la pantalla gigante
+    revalidatePath("/dashboard");
+    revalidatePath("/molinete");
+
     return {
-      success: true,
+      success: estadoAcceso === "ACTIVO",
       estado: estadoAcceso,
-      mensaje: mensaje,
+      mensaje,
+      diasVencido,
+      ingresoId: ingreso.id,
       cliente: {
         nombre: cliente.nombre,
         apellido: cliente.apellido,
         documento: cliente.documento,
-        foto: cliente.foto
+        foto: cliente.foto,
       },
-      ingresoId: ingreso.id
     };
-
   } catch (error) {
-    console.error(error);
-    return { success: false, error: "Error de servidor al registrar ingreso." };
-  }
-}
-
-export async function getUltimosIngresos(sucursalId: number) {
-  try {
-    const context = await requireStaffContext({ branchId: sucursalId });
-    const ingresos = await prisma.ingreso.findMany({
-      where: { tenantId: context.tenantId, sucursalId },
-      orderBy: { fechaHora: 'desc' },
-      take: 8,
-      include: {
-        cliente: {
-          select: { nombre: true, apellido: true }
-        }
-      }
-    });
-    return { success: true, data: ingresos };
-  } catch (error) {
-    return { success: false, error: "Error al cargar historial" };
+    console.error("Error registrando ingreso en molinete:", error);
+    return { success: false, estado: "ERROR", error: "Error al procesar el ingreso." };
   }
 }
