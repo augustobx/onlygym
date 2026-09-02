@@ -4,8 +4,9 @@ import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
-import { MEMBER_SESSION_COOKIE, hashSessionToken, requireMemberContext, resolveTenantForMemberLogin } from "@/lib/member-context";
+import { MEMBER_SESSION_COOKIE, hashSessionToken, requireMemberContext } from "@/lib/member-context";
 import { hashMemberPassword, verifyMemberPassword } from "@/lib/member-credentials";
+import { getRequestTenantLifecycle } from "@/lib/tenant-lifecycle";
 
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
 
@@ -34,8 +35,14 @@ async function createMemberSession(tenantId: number, clienteId: number) {
 
 export async function loginCliente(usuario: string, passwordStr: string) {
   try {
-    const tenant = await resolveTenantForMemberLogin();
-    if (!tenant) return { success: false, error: "Gimnasio no disponible" };
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") {
+      return { success: false, suspended: true as const, error: "Servicio suspendido" };
+    }
+    if (lifecycle.status !== "operational" || !lifecycle.tenant) {
+      return { success: false, error: "Gimnasio no disponible" };
+    }
+    const tenant = lifecycle.tenant;
 
     const cleanUser = usuario.trim();
     const candidatePassword = passwordStr.trim();
@@ -106,6 +113,8 @@ export async function cambiarPasswordPortal(nuevaPassword: string) {
     await createMemberSession(context.tenantId, context.clienteId);
     return { success: true, mensaje: "Contraseña actualizada" };
   } catch {
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
     return { success: false, error: "No se pudo actualizar la contraseña" };
   }
 }
@@ -177,7 +186,7 @@ export async function getPortalData() {
       prisma.movimientoPuntos.aggregate({ where: { tenantId: context.tenantId, clienteId: context.clienteId }, _sum: { puntos: true } }),
       prisma.reservaClase.findMany({
         where: { tenantId: context.tenantId, clienteId: context.clienteId, OR: [{ estado: { in: ["cancelada", "asistio"] } }, { clase: { inicio: { lt: new Date() } } }] },
-        include: { clase: { include: { tipoClase: true, sucursal: true, entrenador: { include: { user: { select: { name: true } } } } } } },
+        include: { clase: { include: { tipoClase: true, sucursal: true, entrenador: { include: { user: { select: { name: true } } } } } },
         orderBy: { creadaEn: "desc" }, take: 30,
       }),
     ]);
@@ -200,6 +209,8 @@ export async function getPortalData() {
       debeCambiarPassword: cliente.usuarioCliente?.debeCambiarPassword ?? false,
     }) };
   } catch {
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
     return { success: false, error: "No autorizado" };
   }
 }
@@ -224,6 +235,8 @@ export async function getDetalleTicketVenta(ticketId: number) {
       items: venta.items.map((item) => ({ id: item.id, nombre: item.producto.nombre, cantidad: item.cantidad, precioUnitario: Number(item.precioUnitario), subtotal: Number(item.subtotal) })),
     }) };
   } catch {
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
     return { success: false, error: "No autorizado" };
   }
 }
