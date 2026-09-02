@@ -25,7 +25,9 @@ services:
       retries: 20
 
   migrate:
-    build: .
+    build:
+      context: .
+      target: migrate
     container_name: onlygym-migrate
     environment: &app_environment
       NODE_ENV: production
@@ -55,7 +57,9 @@ services:
         condition: service_healthy
 
   web:
-    build: .
+    build:
+      context: .
+      target: runner
     container_name: onlygym-web
     restart: unless-stopped
     environment: *app_environment
