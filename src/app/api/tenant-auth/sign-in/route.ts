@@ -5,30 +5,25 @@ import { getRequestTenantSlug } from "@/lib/request-tenant";
 
 export async function POST(request: NextRequest) {
   const tenantSlug = await getRequestTenantSlug();
-  if (!tenantSlug) {
-    return NextResponse.json({ message: "Dominio de gimnasio inválido" }, { status: 400 });
-  }
+  if (!tenantSlug) return NextResponse.json({ message: "Dominio de gimnasio inválido" }, { status: 400 });
 
-  let body: { email?: string; password?: string };
+  let body: { identifier?: string; email?: string; username?: string; password?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ message: "Solicitud inválida" }, { status: 400 });
   }
 
-  const email = body.email?.trim().toLowerCase();
+  const identifier = String(body.identifier || body.email || body.username || "").trim().toLowerCase();
   const password = body.password;
-  if (!email || !password) {
-    return NextResponse.json({ message: "Correo o contraseña incorrectos" }, { status: 401 });
-  }
+  if (!identifier || !password) return NextResponse.json({ message: "Usuario o contraseña incorrectos" }, { status: 401 });
 
-  // Antes de autenticar, la identidad debe pertenecer al tenant indicado
-  // por el hostname actual. Esto impide usar credenciales de otro gimnasio.
+  const isEmail = identifier.includes("@");
   const membership = await prisma.tenantUsuario.findFirst({
     where: {
       estado: "activo",
       user: {
-        email,
+        ...(isEmail ? { email: identifier } : { username: identifier }),
         estado: "activo",
       },
       tenant: {
@@ -36,20 +31,14 @@ export async function POST(request: NextRequest) {
         estado: { in: ["activo", "prueba"] },
       },
     },
-    select: { id: true },
+    select: { userId: true },
   });
 
-  if (!membership) {
-    return NextResponse.json({ message: "Correo o contraseña incorrectos" }, { status: 401 });
+  if (!membership) return NextResponse.json({ message: "Usuario o contraseña incorrectos" }, { status: 401 });
+
+  if (isEmail) {
+    return auth.api.signInEmail({ body: { email: identifier, password, rememberMe: true }, headers: request.headers, asResponse: true });
   }
 
-  return auth.api.signInEmail({
-    body: {
-      email,
-      password,
-      rememberMe: true,
-    },
-    headers: request.headers,
-    asResponse: true,
-  });
+  return auth.api.signInUsername({ body: { username: identifier, password, rememberMe: true }, headers: request.headers, asResponse: true });
 }
