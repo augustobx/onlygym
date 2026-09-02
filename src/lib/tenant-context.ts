@@ -6,6 +6,7 @@ import { RolTenant } from "@prisma/client";
 import { cookies, headers } from "next/headers";
 import { selectActiveMembership, TenantSelectionRequiredError } from "@/lib/access-policy";
 import { writeAudit } from "@/lib/audit";
+import { getRequestTenantSlug } from "@/lib/request-tenant";
 
 export const ACTIVE_BRANCH_COOKIE = "onlygym_active_branch";
 export const ACTIVE_TENANT_COOKIE = "onlygym_active_tenant";
@@ -59,11 +60,17 @@ export async function requireStaffContext(options: StaffContextOptions = {}): Pr
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new AuthorizationError("Sesión requerida");
 
+  const requestTenantSlug = await getRequestTenantSlug();
+  if (!requestTenantSlug) throw new AuthorizationError("Dominio de gimnasio inválido");
+
   const memberships = await prisma.tenantUsuario.findMany({
     where: {
       userId: session.user.id,
       estado: "activo",
-      tenant: { estado: { in: ["activo", "prueba"] } },
+      tenant: {
+        slug: requestTenantSlug,
+        estado: { in: ["activo", "prueba"] },
+      },
     },
     include: { tenant: true },
     orderBy: { id: "asc" },
@@ -72,7 +79,7 @@ export async function requireStaffContext(options: StaffContextOptions = {}): Pr
   const cookieStore = await cookies();
   const cookieTenantId = Number(cookieStore.get(ACTIVE_TENANT_COOKIE)?.value || 0);
   const membership = selectActiveMembership(memberships, cookieTenantId || null);
-  if (!membership) throw new AuthorizationError("Sin acceso a un gimnasio activo o en prueba");
+  if (!membership) throw new AuthorizationError("Sin acceso a este gimnasio");
   if (options.roles && !options.roles.includes(membership.rol)) {
     throw new AuthorizationError("Tu rol no permite realizar esta operación");
   }
@@ -110,8 +117,20 @@ export async function requireStaffContext(options: StaffContextOptions = {}): Pr
 export async function setActiveTenantCookie(tenantId: number) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new AuthorizationError("Sesión requerida");
+
+  const requestTenantSlug = await getRequestTenantSlug();
+  if (!requestTenantSlug) throw new AuthorizationError("Dominio de gimnasio inválido");
+
   const membership = await prisma.tenantUsuario.findFirst({
-    where: { tenantId, userId: session.user.id, estado: "activo", tenant: { estado: { in: ["activo", "prueba"] } } },
+    where: {
+      tenantId,
+      userId: session.user.id,
+      estado: "activo",
+      tenant: {
+        slug: requestTenantSlug,
+        estado: { in: ["activo", "prueba"] },
+      },
+    },
     include: { tenant: { select: { id: true, slug: true, nombre: true } } },
   });
   if (!membership) {
