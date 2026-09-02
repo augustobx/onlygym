@@ -4,42 +4,43 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Activity,
-  BarChart3,
-  CalendarDays,
+  Building2,
   ChevronRight,
-  CreditCard,
   Dumbbell,
   ExternalLink,
   LayoutDashboard,
   LogOut,
   MapPin,
   Menu,
-  Receipt,
-  Ruler,
   Settings,
-  ShieldAlert,
   ShoppingCart,
-  Store,
-  Trophy,
   UserCheck,
   Users,
   X,
 } from "lucide-react";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import AreaOperationsNav from "@/components/AreaOperationsNav";
 import { getStaffNavigationContext } from "@/app/actions/auth-actions";
 
-type NavItem = {
+type PrimaryItem = {
+  key: "inicio" | "socios" | "entrenamiento" | "operacion" | "gestion" | "entrenador";
   href: string;
   label: string;
   description: string;
   icon: typeof Users;
-  roles?: string[];
-  module?: string;
-  secondary?: boolean;
 };
 
-type NavGroup = { label: string; items: NavItem[] };
+const operationsRoles = ["OWNER", "ADMIN", "RECEPCION"];
+
+function areaForPath(pathname: string) {
+  if (pathname === "/dashboard") return "inicio" as const;
+  if (pathname === "/dashboard/entrenador" || pathname.startsWith("/dashboard/entrenador/")) return "entrenador" as const;
+  if (["/dashboard/clientes", "/dashboard/pagos", "/dashboard/cuentas", "/dashboard/recompensas"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "socios" as const;
+  if (["/dashboard/entrenamiento", "/dashboard/clases", "/dashboard/entrenadores", "/dashboard/mediciones"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "entrenamiento" as const;
+  if (["/dashboard/caja", "/dashboard/productos", "/dashboard/aforo"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "operacion" as const;
+  if (["/dashboard/reportes", "/dashboard/empleados", "/dashboard/configuracion", "/dashboard/seguridad"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "gestion" as const;
+  return "inicio" as const;
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -69,144 +70,108 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
+    } finally {
       localStorage.removeItem("activeSucursalId");
       localStorage.removeItem("activeSucursalName");
       router.replace("/login");
       router.refresh();
-    } catch {
-      router.replace("/login");
     }
   };
 
-  const canShow = (item: NavItem) =>
-    (!item.roles || item.roles.includes(userRole)) && (!item.module || modules[item.module] !== false);
+  const activeArea = areaForPath(pathname);
+  const moduleEnabled = (key: string) => modules[key] !== false;
+  const canOperate = operationsRoles.includes(userRole);
+  const canManage = ["OWNER", "ADMIN"].includes(userRole);
+  const hasTraining = moduleEnabled("entrenamiento") || moduleEnabled("clases") || moduleEnabled("mediciones");
 
-  const operationsRoles = ["OWNER", "ADMIN", "RECEPCION"];
-  const navigationGroups: NavGroup[] = [
-    {
-      label: "Inicio",
-      items: [
-        { href: "/dashboard", label: "Resumen", description: "Lo importante de la sede hoy", icon: LayoutDashboard },
-        { href: "/dashboard/entrenador", label: "Mi trabajo", description: "Socios y tareas del entrenador", icon: UserCheck, roles: ["ENTRENADOR"] },
-      ],
-    },
-    {
-      label: "Socios",
-      items: [
-        { href: "/dashboard/clientes", label: "Padrón de socios", description: "Altas, fichas y estado de membresía", icon: Users, roles: operationsRoles, module: "socios" },
-        { href: "/dashboard/pagos", label: "Cobrar membresía", description: "Renovaciones y pagos", icon: CreditCard, roles: operationsRoles, module: "membresias", secondary: true },
-        { href: "/dashboard/cuentas", label: "Cuentas corrientes", description: "Deudas, abonos y límites", icon: Receipt, roles: operationsRoles, secondary: true },
-      ],
-    },
-    {
-      label: "Entrenamiento",
-      items: [
-        { href: "/dashboard/entrenamiento", label: "Rutinas y planes", description: "Objetivos, rutinas y asignaciones", icon: Dumbbell, module: "entrenamiento" },
-        { href: "/dashboard/clases", label: "Clases y reservas", description: "Agenda, cupos y asistencia", icon: CalendarDays, module: "clases" },
-        { href: "/dashboard/entrenadores", label: "Entrenadores", description: "Equipo de profesores", icon: UserCheck, roles: ["OWNER", "ADMIN"], secondary: true },
-        { href: "/dashboard/mediciones", label: "Mediciones y progreso", description: "Evolución física de socios", icon: Ruler, module: "mediciones", secondary: true },
-        { href: "/dashboard/recompensas", label: "Puntos y beneficios", description: "Fidelización y premios", icon: Trophy, roles: ["OWNER", "ADMIN"], module: "puntos", secondary: true },
-      ],
-    },
-    {
-      label: "Operación",
-      items: [
-        { href: "/dashboard/caja", label: "Ventas / POS", description: "Venta de productos y consumos", icon: ShoppingCart, roles: operationsRoles, module: "caja" },
-        { href: "/dashboard/productos", label: "Productos y stock", description: "Catálogo e inventario", icon: Store, roles: operationsRoles, module: "caja", secondary: true },
-        { href: "/dashboard/aforo", label: "Aforo y salidas", description: "Personas dentro de la sede", icon: Activity, module: "accesos", secondary: true },
-      ],
-    },
-    {
-      label: "Administración",
-      items: [
-        { href: "/dashboard/reportes", label: "Reportes", description: "Indicadores y finanzas", icon: BarChart3, roles: ["OWNER", "ADMIN"], module: "reportes" },
-        { href: "/dashboard/empleados", label: "Personal y permisos", description: "Usuarios internos y accesos", icon: UserCheck, roles: ["OWNER", "ADMIN"], secondary: true },
-        { href: "/dashboard/configuracion", label: "Sedes y configuración", description: "Horarios y parámetros", icon: Settings, roles: ["OWNER", "ADMIN"], secondary: true },
-        { href: "/dashboard/seguridad", label: "Seguridad y auditoría", description: "Sesiones y actividad administrativa", icon: ShieldAlert, roles: ["OWNER", "ADMIN"], secondary: true },
-      ],
-    },
-  ]
-    .map((group) => ({ ...group, items: group.items.filter(canShow) }))
-    .filter((group) => group.items.length > 0);
+  const primaryItems: PrimaryItem[] = [
+    { key: "inicio", href: "/dashboard", label: "Resumen", description: "Lo importante de la sede hoy", icon: LayoutDashboard },
+    ...(userRole === "ENTRENADOR" ? [{ key: "entrenador" as const, href: "/dashboard/entrenador", label: "Mi trabajo", description: "Socios y tareas asignadas", icon: UserCheck }] : []),
+    ...(canOperate && moduleEnabled("socios") ? [{ key: "socios" as const, href: "/dashboard/clientes", label: "Socios", description: "Altas, membresías, cobros y cuentas", icon: Users }] : []),
+    ...(hasTraining ? [{ key: "entrenamiento" as const, href: "/dashboard/entrenamiento", label: "Entrenamiento", description: "Planificación, clases y progreso", icon: Dumbbell }] : []),
+    ...(canOperate && moduleEnabled("caja") ? [{ key: "operacion" as const, href: "/dashboard/caja", label: "Operación", description: "Ventas, stock, aforo y caja", icon: ShoppingCart }] : []),
+    ...(canManage ? [{ key: "gestion" as const, href: "/dashboard/reportes", label: "Gestión", description: "Reportes, personal y configuración", icon: Building2 }] : []),
+  ];
 
-  const flatNavItems = navigationGroups.flatMap((group) => group.items);
-  const currentNav = [...flatNavItems]
-    .sort((a, b) => b.href.length - a.href.length)
-    .find((item) => pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`))) || {
-      label: "Gestión",
-      description: "Panel administrativo",
-      href: "/dashboard",
-    };
-
-  const canUseTurnstile = operationsRoles.includes(userRole);
-  const canConfigure = ["OWNER", "ADMIN"].includes(userRole);
-
-  const renderNavItem = (item: NavItem) => {
-    const Icon = item.icon;
-    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(`${item.href}/`));
-    return (
-      <Link
-        key={item.href}
-        href={item.href}
-        onClick={() => setMobileMenuOpen(false)}
-        title={item.description}
-        className={`${item.secondary ? "ml-3 border-l border-slate-800 pl-3" : ""} flex items-center gap-2.5 rounded-r-lg py-2 pr-2.5 text-xs transition-all ${
-          item.secondary ? "rounded-l-none" : "rounded-l-lg pl-2.5"
-        } ${
-          isActive
-            ? "bg-gradient-to-r from-cyan-600 to-blue-600 font-bold text-white shadow-xs shadow-cyan-600/20"
-            : item.secondary
-              ? "font-medium text-slate-400 hover:bg-slate-900 hover:text-white"
-              : "font-semibold text-slate-200 hover:bg-slate-900 hover:text-white"
-        }`}
-      >
-        <Icon className={`${item.secondary ? "h-3.5 w-3.5" : "h-4 w-4"} shrink-0 ${isActive ? "text-white" : item.secondary ? "text-slate-500" : "text-slate-400"}`} />
-        <span className="truncate">{item.label}</span>
-      </Link>
-    );
-  };
+  const activeItem = primaryItems.find((item) => item.key === activeArea) || primaryItems[0];
+  const canUseTurnstile = canOperate && moduleEnabled("accesos");
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased md:flex-row">
-      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-800 bg-slate-950 px-4 py-3 text-white md:hidden">
-        <Link href="/dashboard" className="flex items-center gap-2.5"><div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600"><Dumbbell className="h-4 w-4" /></div><span className="text-sm font-bold">OnlyGym</span></Link>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="rounded-lg border border-slate-800 bg-slate-900 p-1.5 text-slate-300" aria-label="Abrir menú">{mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
+      <div className="sticky top-0 z-50 flex items-center justify-between border-b border-slate-800 bg-slate-950 px-4 py-3 text-white md:hidden">
+        <Link href="/dashboard" className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600"><Dumbbell className="h-4 w-4" /></span>
+          <span><strong className="block text-sm leading-none">OnlyGym</strong><small className="mt-1 block max-w-44 truncate text-[10px] font-semibold text-slate-400">{tenantName}</small></span>
+        </Link>
+        <button onClick={() => setMobileMenuOpen((value) => !value)} className="rounded-lg border border-slate-800 bg-slate-900 p-1.5 text-slate-300" aria-label="Abrir menú">
+          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
       </div>
 
-      <aside className={`${mobileMenuOpen ? "block" : "hidden"} z-30 w-full shrink-0 border-r border-slate-800/90 bg-slate-950 text-slate-300 md:sticky md:top-0 md:flex md:h-screen md:w-72 md:flex-col`}>
-        <div className="border-b border-slate-800/80 p-4">
-          <Link href="/dashboard" className="flex items-center gap-2.5" title="Ir al resumen"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-cyan-600 via-sky-500 to-blue-600 text-white"><Dumbbell className="h-4 w-4" /></div><div className="min-w-0"><div className="flex items-center gap-1.5"><span className="text-sm font-bold leading-none text-white">OnlyGym</span><span className="rounded border border-cyan-700/60 bg-cyan-950/90 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-300">PRO</span></div><span className="mt-1 block max-w-48 truncate text-[11px] font-medium text-slate-400">{tenantName}</span></div></Link>
+      <aside className={`${mobileMenuOpen ? "flex" : "hidden"} z-40 w-full shrink-0 flex-col border-r border-slate-800 bg-slate-950 text-slate-300 md:sticky md:top-0 md:flex md:h-screen md:w-64`}>
+        <div className="border-b border-slate-800 p-4">
+          <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-950/30"><Dumbbell className="h-4 w-4" /></span>
+            <span className="min-w-0"><span className="block text-sm font-black text-white">OnlyGym</span><span className="block truncate text-[11px] font-semibold text-slate-400">{tenantName}</span></span>
+          </Link>
         </div>
 
-        <div className="px-3 pb-1 pt-3">
-          <Link href="/seleccionar-sucursal" className="group flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/90 px-3 py-2.5 text-xs hover:border-cyan-500/40"><div className="flex min-w-0 items-center gap-2"><MapPin className="h-3.5 w-3.5 shrink-0 text-cyan-400" /><div className="min-w-0"><span className="block text-[10px] font-semibold uppercase leading-none text-slate-400">Sucursal activa</span><span className="mt-1 block truncate text-xs font-bold text-white">{sucursalNombre}</span></div></div><ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-400" /></Link>
+        <div className="px-3 pt-3">
+          <Link href="/seleccionar-sucursal" onClick={() => setMobileMenuOpen(false)} className="group flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5 text-xs">
+            <span className="flex min-w-0 items-center gap-2"><MapPin className="h-3.5 w-3.5 shrink-0 text-cyan-400" /><span className="min-w-0"><span className="block text-[9px] font-black uppercase tracking-wider text-slate-500">Sede activa</span><strong className="mt-0.5 block truncate text-white">{sucursalNombre}</strong></span></span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500 group-hover:text-cyan-400" />
+          </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
-          <div className="space-y-4">
-            {navigationGroups.map((group) => (
-              <section key={group.label}>
-                <div className="px-2 pb-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">{group.label}</div>
-                <div className="space-y-0.5">{group.items.map(renderNavItem)}</div>
-                {group.label === "Operación" && canUseTurnstile && (
-                  <a href="/molinete" target="_blank" rel="noreferrer" className="ml-3 mt-0.5 flex items-center justify-between border-l border-slate-800 py-2 pl-3 pr-2.5 text-xs font-medium text-cyan-300 hover:bg-cyan-950/40" title="Abrir terminal de ingreso"><span className="flex items-center gap-2.5"><ExternalLink className="h-3.5 w-3.5 text-cyan-400" />Molinete / ingreso</span><ExternalLink className="h-3 w-3 text-slate-500" /></a>
-                )}
-              </section>
-            ))}
+        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Áreas principales">
+          <p className="px-2 pb-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600">Áreas de trabajo</p>
+          <div className="space-y-1">
+            {primaryItems.map(({ key, href, label, description, icon: Icon }) => {
+              const active = activeArea === key;
+              return (
+                <Link
+                  key={key}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  title={description}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition ${active ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-sm" : "text-slate-300 hover:bg-slate-900 hover:text-white"}`}
+                >
+                  <Icon className={`h-4 w-4 shrink-0 ${active ? "text-white" : "text-slate-500"}`} />
+                  <span className="min-w-0"><strong className="block text-xs">{label}</strong><small className={`mt-0.5 hidden truncate text-[9px] font-medium xl:block ${active ? "text-cyan-100" : "text-slate-600"}`}>{description}</small></span>
+                </Link>
+              );
+            })}
           </div>
+
+          {canUseTurnstile && (
+            <div className="mt-5 border-t border-slate-800 pt-3">
+              <p className="px-2 pb-1 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600">Terminal</p>
+              <a href="/molinete" target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-950/40">
+                <span className="flex items-center gap-2"><ExternalLink className="h-3.5 w-3.5" />Ingreso / molinete</span><ExternalLink className="h-3 w-3 text-slate-600" />
+              </a>
+            </div>
+          )}
         </nav>
 
-        <div className="space-y-2 border-t border-slate-800/80 p-3">
+        <div className="space-y-2 border-t border-slate-800 p-3">
           <PWAInstallPrompt variant="sidebar" appName="OnlyGym Admin" />
-          <div className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/60 px-2 py-1.5"><div className="flex min-w-0 items-center gap-2"><div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-cyan-700 to-blue-800 text-xs font-bold text-white">{userName.charAt(0).toUpperCase()}</div><div className="truncate"><p className="truncate text-xs font-semibold leading-tight text-white">{userName}</p><p className="text-[10px] font-mono leading-none text-cyan-400">{userRole}</p></div></div><button onClick={handleLogout} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-rose-400" title="Cerrar sesión"><LogOut className="h-4 w-4" /></button></div>
+          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2">
+            <span className="flex min-w-0 items-center gap-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-cyan-900 text-xs font-black text-cyan-100">{userName.charAt(0).toUpperCase()}</span><span className="min-w-0"><strong className="block truncate text-xs text-white">{userName}</strong><small className="block text-[9px] font-mono text-cyan-400">{userRole}</small></span></span>
+            <button onClick={handleLogout} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-rose-400" title="Cerrar sesión"><LogOut className="h-4 w-4" /></button>
+          </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/90 bg-white px-4 py-2.5 shadow-2xs sm:px-6">
-          <div className="min-w-0"><div className="flex items-center gap-1.5 text-xs font-medium text-slate-600"><Link href="/dashboard" className="hover:text-cyan-700">Inicio</Link>{pathname !== "/dashboard" && <><ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate font-bold text-slate-900">{currentNav.label}</span></>}</div>{pathname !== "/dashboard" && <p className="mt-0.5 hidden text-[10px] font-medium text-slate-400 lg:block">{currentNav.description}</p>}</div>
-          <div className="flex items-center gap-2.5"><Link href="/seleccionar-sucursal" className="hidden items-center gap-1.5 rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-900 sm:flex" title="Cambiar sucursal"><MapPin className="h-3 w-3 text-cyan-600" />{sucursalNombre}</Link>{canConfigure && <Link href="/dashboard/configuracion" className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Sedes y configuración"><Settings className="h-4 w-4" /></Link>}</div>
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 shadow-2xs sm:px-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500"><Link href="/dashboard" className="hover:text-cyan-700">Inicio</Link>{activeArea !== "inicio" && <><ChevronRight className="h-3.5 w-3.5" /><strong className="truncate text-slate-900">{activeItem?.label || "Panel"}</strong></>}</div>
+            {activeArea !== "inicio" && <p className="mt-0.5 hidden text-[10px] font-medium text-slate-400 lg:block">{activeItem?.description}</p>}
+          </div>
+          <div className="flex items-center gap-2"><Link href="/seleccionar-sucursal" className="hidden items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-bold text-cyan-950 sm:flex"><MapPin className="h-3 w-3 text-cyan-600" />{sucursalNombre}</Link>{canManage && <Link href="/dashboard/configuracion" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950" title="Configuración"><Settings className="h-4 w-4" /></Link>}</div>
         </header>
+
+        <AreaOperationsNav pathname={pathname} userRole={userRole} modules={modules} />
         <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
