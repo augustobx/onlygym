@@ -7,6 +7,10 @@ import { hashPassword } from "better-auth/crypto";
 import { writeAudit } from "@/lib/audit";
 import { requirePlatformRequestHost } from "@/lib/request-tenant";
 
+const RESERVED_TENANT_SLUGS = new Set([
+  "admin", "superadmin", "api", "app", "dashboard", "portal", "status", "health", "mail", "cdn", "onlygym",
+]);
+
 const onboardingSchema = z.object({
   nombreGimnasio: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(3).max(80).regex(/^[a-z0-9-]+$/, "Slug solo letras minúsculas, números y guiones"),
@@ -25,6 +29,8 @@ export async function registrarNuevoGimnasio(input: z.input<typeof onboardingSch
     const slug = data.slug.toLowerCase().trim();
     const email = data.emailAdmin.toLowerCase().trim();
 
+    if (RESERVED_TENANT_SLUGS.has(slug)) return { success: false, error: "El subdominio está reservado por la plataforma." };
+
     const existing = await prisma.tenant.findUnique({ where: { slug } });
     if (existing) return { success: false, error: "El subdominio ya está en uso. Por favor elige otro." };
 
@@ -32,7 +38,7 @@ export async function registrarNuevoGimnasio(input: z.input<typeof onboardingSch
     if (existingUser) return { success: false, error: "Ya existe un usuario con este correo electrónico." };
 
     let plan = await prisma.planSaaS.findUnique({ where: { codigo: data.planCodigo } });
-    if (!plan) plan = await prisma.planSaaS.findFirst({ where: { activo: true }, orderBy: { precioMensual: "asc" } });
+    if (!plan || !plan.activo) plan = await prisma.planSaaS.findFirst({ where: { activo: true }, orderBy: { precioMensual: "asc" } });
 
     const diasPrueba = 14;
     const fechaVencimiento = new Date();
@@ -41,43 +47,19 @@ export async function registrarNuevoGimnasio(input: z.input<typeof onboardingSch
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: {
-          nombre: data.nombreGimnasio,
-          slug,
-          estado: "prueba",
-          planSaaSId: plan?.id,
-          fechaVencimiento,
-        },
+        data: { nombre: data.nombreGimnasio, slug, estado: "prueba", planSaaSId: plan?.id, fechaVencimiento },
       });
 
       const sucursal = await tx.sucursal.create({
-        data: {
-          tenantId: tenant.id,
-          nombre: data.nombreSede,
-          direccion: data.direccionSede || null,
-          estado: "activo",
-        },
+        data: { tenantId: tenant.id, nombre: data.nombreSede, direccion: data.direccionSede || null, estado: "activo" },
       });
 
       const user = await tx.user.create({
-        data: {
-          email,
-          name: data.nombreAdmin,
-          nivel: "admin",
-          estado: "activo",
-          emailVerified: true,
-          sucursales: { connect: [{ id: sucursal.id }] },
-        },
+        data: { email, name: data.nombreAdmin, nivel: "admin", estado: "activo", emailVerified: true, sucursales: { connect: [{ id: sucursal.id }] } },
       });
 
       await tx.account.create({
-        data: {
-          accountId: user.id,
-          providerId: "credential",
-          userId: user.id,
-          password: passwordHash,
-          issuer: "local:credential",
-        },
+        data: { accountId: user.id, providerId: "credential", userId: user.id, password: passwordHash, issuer: "local:credential" },
       });
 
       await tx.tenantUsuario.create({
