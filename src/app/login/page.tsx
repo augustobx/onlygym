@@ -28,12 +28,15 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.code === "TENANT_SUSPENDED") {
+          router.replace("/suspendido");
+          return;
+        }
         setError(data.message || "Usuario o contraseña incorrectos");
         setLoading(false);
         return;
       }
 
-      // El dominio ya identifica un único tenant. Después del login sólo falta elegir la sede operativa.
       router.replace("/seleccionar-sucursal");
     } catch {
       setError("Error de conexión con el servidor");
@@ -62,18 +65,7 @@ export default function LoginPage() {
               <label htmlFor="identifier" className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">Correo o usuario</label>
               <div className="relative rounded-lg shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><UserRound className="h-4 w-4 text-cyan-400" /></div>
-                <input
-                  id="identifier"
-                  name="identifier"
-                  type="text"
-                  required
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
-                  placeholder="admin@tugimnasio.com o usuario"
-                  autoFocus
-                  autoComplete="username"
-                />
+                <input id="identifier" name="identifier" type="text" required value={identifier} onChange={(e) => setIdentifier(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium" placeholder="admin@tugimnasio.com o usuario" autoFocus autoComplete="username" />
               </div>
             </div>
 
@@ -81,17 +73,7 @@ export default function LoginPage() {
               <label htmlFor="password" className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">Contraseña</label>
               <div className="relative rounded-lg shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-4 w-4 text-cyan-400" /></div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
+                <input id="password" name="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium" placeholder="••••••••" autoComplete="current-password" />
               </div>
             </div>
 
