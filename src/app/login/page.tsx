@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, User, ShieldCheck } from "lucide-react";
+import { Lock, Mail, ShieldCheck } from "lucide-react";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,23 +19,23 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/auth/sign-in/username", {
+      const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
         credentials: "include",
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Usuario o contraseña incorrectos");
+        setError(data.message || "Correo o contraseña incorrectos");
         setLoading(false);
         return;
       }
 
       router.push("/seleccionar-gimnasio");
-    } catch (err) {
+    } catch {
       setError("Error de conexión con el servidor");
       setLoading(false);
     }
@@ -48,12 +48,8 @@ export default function LoginPage() {
           <ShieldCheck className="h-6 w-6" />
         </div>
         <div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            OnlyGym
-          </h2>
-          <p className="text-xs text-slate-400 font-semibold mt-1">
-            Acceso Administrativo & Personal de Sede
-          </p>
+          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">OnlyGym</h2>
+          <p className="text-xs text-slate-400 font-semibold mt-1">Acceso Administrativo & Personal de Sede</p>
         </div>
       </div>
 
@@ -65,26 +61,26 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            
+
             <div>
-              <label htmlFor="username" className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Usuario del Sistema
+              <label htmlFor="email" className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Correo de acceso
               </label>
               <div className="relative rounded-lg shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-4 w-4 text-cyan-400" />
+                  <Mail className="h-4 w-4 text-cyan-400" />
                 </div>
                 <input
-                  id="username"
-                  name="username"
-                  type="text"
+                  id="email"
+                  name="email"
+                  type="email"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 font-medium"
-                  placeholder="admin"
+                  placeholder="admin@tugimnasio.com"
                   autoFocus
-                  autoComplete="username"
+                  autoComplete="email"
                 />
               </div>
             </div>
@@ -118,7 +114,9 @@ export default function LoginPage() {
             >
               {loading ? "Verificando..." : "Ingresar al Panel"}
             </button>
-            <Link href="/recuperar-password" className="block text-center text-xs font-bold text-cyan-400 hover:text-cyan-300">¿Olvidaste tu contraseña?</Link>
+            <Link href="/recuperar-password" className="block text-center text-xs font-bold text-cyan-400 hover:text-cyan-300">
+              ¿Olvidaste tu contraseña?
+            </Link>
           </form>
         </div>
 
