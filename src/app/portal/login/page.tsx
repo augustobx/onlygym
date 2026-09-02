@@ -92,7 +92,9 @@ export default function PortalLoginPage() {
                   autoComplete="current-password"
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-1.5 font-medium">Si es tu primer ingreso, tu clave por defecto es <strong className="text-cyan-400">123456</strong>.</p>
+              <p className="text-[10px] text-slate-500 mt-1.5 font-medium">
+                En tu primer ingreso usá la <strong className="text-cyan-400">contraseña temporal entregada por el gimnasio</strong>.
+              </p>
             </div>
 
             <button
