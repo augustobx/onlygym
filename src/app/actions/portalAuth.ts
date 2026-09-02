@@ -1,20 +1,13 @@
 "use server";
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { MEMBER_SESSION_COOKIE, hashSessionToken, requireMemberContext, resolveTenantForMemberLogin } from "@/lib/member-context";
+import { hashMemberPassword, verifyMemberPassword } from "@/lib/member-credentials";
 
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
-
-async function passwordMatches(stored: string, candidate: string) {
-  if (stored.startsWith("$2")) return bcrypt.compare(candidate, stored);
-  const storedBuffer = Buffer.from(stored);
-  const candidateBuffer = Buffer.from(candidate);
-  return storedBuffer.length === candidateBuffer.length && timingSafeEqual(storedBuffer, candidateBuffer);
-}
 
 async function createMemberSession(tenantId: number, clienteId: number) {
   const token = randomBytes(32).toString("base64url");
@@ -43,21 +36,38 @@ export async function loginCliente(usuario: string, passwordStr: string) {
   try {
     const tenant = await resolveTenantForMemberLogin();
     if (!tenant) return { success: false, error: "Gimnasio no disponible" };
+
     const cleanUser = usuario.trim();
+    const candidatePassword = passwordStr.trim();
     const authRecord = await prisma.usuarioCliente.findFirst({
-      where: { tenantId: tenant.id, OR: [{ usuario: cleanUser }, { cliente: { documento: cleanUser, tenantId: tenant.id } }] },
+      where: {
+        tenantId: tenant.id,
+        cliente: { tenantId: tenant.id },
+        OR: [
+          { usuario: cleanUser },
+          { cliente: { documento: cleanUser, tenantId: tenant.id } },
+        ],
+      },
       include: { cliente: true },
     });
-    if (!authRecord || !(await passwordMatches(authRecord.password, passwordStr.trim()))) {
+
+    if (
+      !authRecord ||
+      authRecord.cliente.tenantId !== tenant.id ||
+      !(await verifyMemberPassword(authRecord.password, candidatePassword))
+    ) {
       return { success: false, error: "Usuario o contraseña incorrectos" };
     }
     if (authRecord.cliente.estado !== "activo") {
       return { success: false, error: "Tu cuenta se encuentra inactiva. Consultá en recepción." };
     }
 
-    const upgradedPassword = authRecord.password.startsWith("$2") ? undefined : await bcrypt.hash(passwordStr.trim(), 12);
-    await prisma.usuarioCliente.update({
-      where: { id: authRecord.id },
+    const upgradedPassword = authRecord.password.startsWith("$2")
+      ? undefined
+      : await hashMemberPassword(candidatePassword);
+
+    await prisma.usuarioCliente.updateMany({
+      where: { id: authRecord.id, tenantId: tenant.id, clienteId: authRecord.clienteId },
       data: { ultimoAcceso: new Date(), ...(upgradedPassword ? { password: upgradedPassword } : {}) },
     });
     await createMemberSession(tenant.id, authRecord.clienteId);
@@ -78,14 +88,21 @@ export async function logoutCliente() {
 }
 
 export async function cambiarPasswordPortal(nuevaPassword: string) {
-  if (nuevaPassword.trim().length < 8) return { success: false, error: "La contraseña debe tener al menos 8 caracteres" };
+  const cleanPassword = nuevaPassword.trim();
+  if (cleanPassword.length < 8) return { success: false, error: "La contraseña debe tener al menos 8 caracteres" };
   try {
     const context = await requireMemberContext();
-    const password = await bcrypt.hash(nuevaPassword.trim(), 12);
-    await prisma.$transaction([
-      prisma.usuarioCliente.update({ where: { clienteId: context.clienteId }, data: { password, debeCambiarPassword: false } }),
-      prisma.sesionSocio.deleteMany({ where: { clienteId: context.clienteId } }),
-    ]);
+    const password = await hashMemberPassword(cleanPassword);
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.usuarioCliente.updateMany({
+        where: { clienteId: context.clienteId, tenantId: context.tenantId },
+        data: { password, debeCambiarPassword: false },
+      });
+      if (!updated.count) return false;
+      await tx.sesionSocio.deleteMany({ where: { tenantId: context.tenantId, clienteId: context.clienteId } });
+      return true;
+    });
+    if (!result) return { success: false, error: "No se encontraron credenciales válidas para este socio" };
     await createMemberSession(context.tenantId, context.clienteId);
     return { success: true, mensaje: "Contraseña actualizada" };
   } catch {
