@@ -2,6 +2,9 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { resolveTenantSlugForHost } from "@/lib/tenant-host";
+import { getAuthoritativeRequestHost, normalizeRequestHost } from "@/lib/request-host";
+
+export { normalizeRequestHost } from "@/lib/request-host";
 
 const RESERVED_SLUGS = new Set([
   "admin",
@@ -16,11 +19,6 @@ const RESERVED_SLUGS = new Set([
   "cdn",
   "onlygym",
 ]);
-
-export function normalizeRequestHost(value: string | null) {
-  if (!value) return "";
-  return value.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
-}
 
 export function getPlatformHostname() {
   const baseDomain = (process.env.TENANT_BASE_DOMAIN || "nanoapps.ar").trim().toLowerCase().replace(/^\.+/, "");
@@ -44,14 +42,11 @@ export function resolveRequestTenantSlug(hostValue: string | null) {
 }
 
 export function getTenantSlugFromRequest(request: Request) {
-  return resolveRequestTenantSlug(request.headers.get("x-forwarded-host") || request.headers.get("host"));
+  return resolveRequestTenantSlug(getAuthoritativeRequestHost(request.headers));
 }
 
 export async function getRequestHostname() {
-  const requestHeaders = await headers();
-  return normalizeRequestHost(
-    requestHeaders.get("x-forwarded-host") || requestHeaders.get("host"),
-  );
+  return getAuthoritativeRequestHost(await headers());
 }
 
 export async function isPlatformRequestHost() {
