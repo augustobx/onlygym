@@ -86,7 +86,7 @@ export async function getProductosPOS(sucursalId: number, categoria?: string, bu
   }
 }
 
-export async function searchClientesPOS(query: string, sucursalId: number) {
+export async function searchClientesPOS(query: string, sucursalId?: number) {
   try {
     const context = await requirePosContext(sucursalId);
     const q = query.trim();
