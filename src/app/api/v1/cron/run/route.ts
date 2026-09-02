@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { validateApiKey } from "@/lib/api-auth";
 
 export async function GET(request: NextRequest) {
   return handleCron(request);
@@ -10,20 +11,10 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCron(request: NextRequest) {
+  const auth = validateApiKey(request);
+  if (!auth.valid) return auth.errorResponse!;
+
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const apiKeyParam = request.nextUrl.searchParams.get("key");
-    const secretKey = process.env.API_SECRET_KEY || "onlygym-api-secret-key-default";
-
-    const isAuthorized =
-      authHeader === `Bearer ${secretKey}` ||
-      apiKeyParam === secretKey ||
-      process.env.NODE_ENV !== "production";
-
-    if (!isAuthorized) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
     const now = new Date();
     const results = {
       recordatoriosClases: 0,
@@ -32,9 +23,6 @@ async function handleCron(request: NextRequest) {
       ejecutadoEn: now.toISOString(),
     };
 
-    // ========================================================
-    // 1. Recordatorios de clases próximas (2 horas antes)
-    // ========================================================
     const in1Hour = new Date(now.getTime() + 60 * 60 * 1000);
     const in3Hours = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 
@@ -42,6 +30,7 @@ async function handleCron(request: NextRequest) {
       where: {
         inicio: { gte: in1Hour, lte: in3Hours },
         estado: "programada",
+        tenant: { estado: { in: ["activo", "prueba"] } },
       },
       include: {
         tipoClase: true,
@@ -55,9 +44,10 @@ async function handleCron(request: NextRequest) {
 
     for (const c of upcomingClasses) {
       for (const res of c.reservas) {
-        // Verificar si ya se envió notificación
+        if (res.cliente.tenantId !== c.tenantId) continue;
         const existing = await prisma.notificacion.findFirst({
           where: {
+            tenantId: c.tenantId,
             clienteId: res.clienteId,
             tipo: "recordatorio_clase",
             datos: { path: ["claseId"], equals: c.id },
@@ -65,9 +55,7 @@ async function handleCron(request: NextRequest) {
         });
 
         if (!existing) {
-          const horaStr = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(
-            new Date(c.inicio)
-          );
+          const horaStr = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(new Date(c.inicio));
           await prisma.notificacion.create({
             data: {
               tenantId: c.tenantId,
@@ -83,9 +71,6 @@ async function handleCron(request: NextRequest) {
       }
     }
 
-    // ========================================================
-    // 2. Avisos de vencimiento de membresías (3 días antes y hoy)
-    // ========================================================
     const in3Days = new Date(now.getTime() + 3 * 86400000);
     const hoyInicio = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const hoyFin = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -93,21 +78,20 @@ async function handleCron(request: NextRequest) {
     const expiringPayments = await prisma.pago.findMany({
       where: {
         estado: "pagado",
-        fechaVencimiento: {
-          gte: hoyInicio,
-          lte: in3Days,
-        },
+        fechaVencimiento: { gte: hoyInicio, lte: in3Days },
+        tenant: { estado: { in: ["activo", "prueba"] } },
       },
       include: { cliente: true, membresia: true },
     });
 
     for (const pago of expiringPayments) {
-      const isToday =
-        pago.fechaVencimiento >= hoyInicio && pago.fechaVencimiento <= hoyFin;
+      if (pago.cliente.tenantId !== pago.tenantId || pago.membresia.tenantId !== pago.tenantId) continue;
+      const isToday = pago.fechaVencimiento >= hoyInicio && pago.fechaVencimiento <= hoyFin;
       const tipo = isToday ? "vencimiento_hoy" : "vencimiento_proximo";
 
       const existingNotif = await prisma.notificacion.findFirst({
         where: {
+          tenantId: pago.tenantId,
           clienteId: pago.clienteId,
           tipo,
           creadaEn: { gte: hoyInicio },
@@ -115,9 +99,7 @@ async function handleCron(request: NextRequest) {
       });
 
       if (!existingNotif) {
-        const fechaStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short" }).format(
-          new Date(pago.fechaVencimiento)
-        );
+        const fechaStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short" }).format(new Date(pago.fechaVencimiento));
         await prisma.notificacion.create({
           data: {
             tenantId: pago.tenantId,
@@ -134,11 +116,7 @@ async function handleCron(request: NextRequest) {
       }
     }
 
-    // ========================================================
-    // 3. Suspensión automática de gimnasios SaaS vencidos (+3 días gracia)
-    // ========================================================
     const gracePeriodLimit = new Date(now.getTime() - 3 * 86400000);
-
     const expiredTenants = await prisma.tenant.findMany({
       where: {
         estado: { in: ["activo", "prueba"] },
@@ -147,23 +125,17 @@ async function handleCron(request: NextRequest) {
     });
 
     for (const t of expiredTenants) {
-      await prisma.tenant.update({
-        where: { id: t.id },
-        data: { estado: "suspendido" },
-      });
-
-      await prisma.suscripcionSaaS.updateMany({
-        where: { tenantId: t.id, estado: { in: ["activa", "prueba"] } },
-        data: { estado: "suspendida" },
-      });
-
+      await prisma.$transaction([
+        prisma.tenant.update({ where: { id: t.id }, data: { estado: "suspendido" } }),
+        prisma.suscripcionSaaS.updateMany({
+          where: { tenantId: t.id, estado: { in: ["activa", "prueba"] } },
+          data: { estado: "suspendida" },
+        }),
+      ]);
       results.gimnasiosSuspendidos++;
     }
 
-    return NextResponse.json({
-      status: "ok",
-      results,
-    });
+    return NextResponse.json({ status: "ok", results });
   } catch (error) {
     console.error("Error en ejecución programada de cron:", error);
     return NextResponse.json({ status: "error", error: "Error en cron" }, { status: 500 });
