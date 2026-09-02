@@ -70,13 +70,17 @@ export default function AreaOperationsNav({ pathname, userRole, modules }: Props
   );
   if (visible.length < 2) return null;
 
+  const activeHref = [...visible]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find(({ href }) => pathname === href || pathname.startsWith(`${href}/`))?.href;
+
   return (
     <div className="border-b border-slate-200 bg-white/95 px-4 py-2 sm:px-6">
       <div className="mx-auto flex max-w-7xl items-center gap-3 overflow-x-auto">
         <span className="hidden shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 lg:block">{group.label}</span>
         <nav className="flex min-w-0 gap-1" aria-label={`Sección ${group.label}`}>
           {visible.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+            const active = activeHref === href;
             return (
               <Link
                 key={href}
