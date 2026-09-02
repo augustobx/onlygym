@@ -175,7 +175,15 @@ export async function registrarPago(data: {
     revalidatePath(`/dashboard/clientes/${data.clienteId}`);
     revalidatePath("/portal/dashboard");
 
-    return { success: true, data: serializeData({ ...pago, monto: Number(pago.monto) }) };
+    return {
+      success: true,
+      data: serializeData({
+        ...pago,
+        monto: Number(pago.monto),
+        fechaPago: pago.fechaPago.toISOString(),
+        fechaVencimiento: pago.fechaVencimiento.toISOString(),
+      }),
+    };
   } catch (error) {
     console.error("Error registrando pago:", error);
     return { success: false, error: "Error registrando el cobro" };
