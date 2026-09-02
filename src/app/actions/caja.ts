@@ -1,10 +1,10 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { RolTenant } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
-import { RolTenant } from "@prisma/client";
 
 const PAYMENT_METHODS = ["efectivo", "tarjeta", "transferencia"] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -14,10 +14,27 @@ function validPaymentMethod(value: string): value is PaymentMethod {
   return PAYMENT_METHODS.includes(value as PaymentMethod);
 }
 
+async function requireBillingContext(requestedBranchId?: number) {
+  const context = await requireStaffContext({ roles: BILLING_ROLES });
+  await requireTenantModule(context.tenantId, "membresias");
+  if (!context.branchId) throw new Error("Seleccioná una sucursal antes de registrar cobros");
+  if (requestedBranchId && requestedBranchId !== context.branchId) {
+    throw new Error("La sucursal solicitada no coincide con la sede activa");
+  }
+  return context;
+}
+
+function billingError(error: unknown, fallback: string) {
+  if (error instanceof Error && [
+    "Seleccioná una sucursal antes de registrar cobros",
+    "La sucursal solicitada no coincide con la sede activa",
+  ].includes(error.message)) return error.message;
+  return fallback;
+}
+
 export async function searchClientes(query: string, sucursalId: number) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
-    await requireTenantModule(context.tenantId, "membresias");
+    const context = await requireBillingContext(sucursalId);
     const cleanQuery = query.trim();
     if (cleanQuery.length < 2) return { success: true, data: [] };
 
@@ -33,7 +50,7 @@ export async function searchClientes(query: string, sucursalId: number) {
         ],
       },
       include: { pagos: { orderBy: { fechaVencimiento: "desc" }, take: 1 } },
-      orderBy: [{ nombre: "asc" }, { apellido: "asc" }],
+      orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
       take: 10,
     });
 
@@ -44,16 +61,14 @@ export async function searchClientes(query: string, sucursalId: number) {
         pagos: cliente.pagos.map((pago) => ({ ...pago, monto: Number(pago.monto) })),
       }))),
     };
-  } catch {
-    return { success: false, error: "Error buscando socios" };
+  } catch (error) {
+    return { success: false, error: billingError(error, "Error buscando socios") };
   }
 }
 
 export async function getClienteParaCobro(clienteId: number, sucursalId: number) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
-    await requireTenantModule(context.tenantId, "membresias");
-
+    const context = await requireBillingContext(sucursalId);
     const cliente = await prisma.cliente.findFirst({
       where: {
         id: clienteId,
@@ -79,31 +94,23 @@ export async function getClienteParaCobro(clienteId: number, sucursalId: number)
         nombre: cliente.nombre,
         apellido: cliente.apellido,
         documento: cliente.documento,
-        ultimoPago: cliente.pagos[0]
-          ? { ...cliente.pagos[0], monto: Number(cliente.pagos[0].monto) }
-          : null,
+        ultimoPago: cliente.pagos[0] ? { ...cliente.pagos[0], monto: Number(cliente.pagos[0].monto) } : null,
       }),
     };
-  } catch {
-    return { success: false, error: "No se pudo cargar el socio" };
+  } catch (error) {
+    return { success: false, error: billingError(error, "No se pudo cargar el socio") };
   }
 }
 
 export async function getMembresiasDisponibles() {
   try {
-    const context = await requireStaffContext();
+    const context = await requireStaffContext({ roles: BILLING_ROLES });
     await requireTenantModule(context.tenantId, "membresias");
     const membresias = await prisma.membresia.findMany({
       where: { tenantId: context.tenantId, estado: "activo" },
       orderBy: [{ diasDuracion: "asc" }, { nombre: "asc" }],
     });
-    return {
-      success: true,
-      data: serializeData(membresias.map((membresia) => ({
-        ...membresia,
-        precio: Number(membresia.precio),
-      }))),
-    };
+    return { success: true, data: serializeData(membresias.map((membresia) => ({ ...membresia, precio: Number(membresia.precio) }))) };
   } catch {
     return { success: false, error: "Error cargando membresías" };
   }
@@ -118,9 +125,7 @@ export async function registrarPago(data: {
   notas?: string;
 }) {
   try {
-    const context = await requireStaffContext({ branchId: data.sucursalId, roles: BILLING_ROLES });
-    await requireTenantModule(context.tenantId, "membresias");
-
+    const context = await requireBillingContext(data.sucursalId);
     const [membresia, cliente] = await Promise.all([
       prisma.membresia.findFirst({ where: { id: data.membresiaId, tenantId: context.tenantId, estado: "activo" } }),
       prisma.cliente.findFirst({
@@ -150,14 +155,13 @@ export async function registrarPago(data: {
     const fechaVencimiento = new Date(fechaInicioBase);
     fechaVencimiento.setDate(fechaVencimiento.getDate() + membresia.diasDuracion);
 
-    const montoFinal = Number(membresia.precio);
     const pago = await prisma.pago.create({
       data: {
         tenantId: context.tenantId,
         clienteId: data.clienteId,
         membresiaId: data.membresiaId,
         sucursalId: context.branchId,
-        monto: montoFinal,
+        monto: Number(membresia.precio),
         metodoPago,
         notas: data.notas?.trim() || null,
         fechaVencimiento,
@@ -186,21 +190,37 @@ export async function registrarPago(data: {
     };
   } catch (error) {
     console.error("Error registrando pago:", error);
-    return { success: false, error: "Error registrando el cobro" };
+    return { success: false, error: billingError(error, "Error registrando el cobro") };
   }
 }
 
-export async function getMovimientosHoy(sucursalId: number) {
+export async function getMovimientosHoy(sucursalId: number, desde?: string, hasta?: string) {
   try {
-    const context = await requireStaffContext({ branchId: sucursalId, roles: BILLING_ROLES });
-    await requireTenantModule(context.tenantId, "membresias");
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    const context = await requireBillingContext(sucursalId);
+    const fechaPago: { gte?: Date; lte?: Date } = {};
+
+    if (desde || hasta) {
+      if (desde) {
+        const start = new Date(desde);
+        start.setHours(0, 0, 0, 0);
+        fechaPago.gte = start;
+      }
+      if (hasta) {
+        const end = new Date(hasta);
+        end.setHours(23, 59, 59, 999);
+        fechaPago.lte = end;
+      }
+    } else {
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      fechaPago.gte = hoy;
+    }
 
     const pagos = await prisma.pago.findMany({
-      where: { tenantId: context.tenantId, sucursalId: context.branchId, fechaPago: { gte: hoy } },
+      where: { tenantId: context.tenantId, sucursalId: context.branchId, fechaPago },
       include: { cliente: true, membresia: true },
       orderBy: { fechaPago: "desc" },
+      take: 1000,
     });
 
     return {
@@ -211,7 +231,7 @@ export async function getMovimientosHoy(sucursalId: number) {
         membresia: pago.membresia ? { ...pago.membresia, precio: Number(pago.membresia.precio) } : null,
       }))),
     };
-  } catch {
-    return { success: false, error: "Error cargando cobros" };
+  } catch (error) {
+    return { success: false, error: billingError(error, "Error cargando cobros") };
   }
 }
