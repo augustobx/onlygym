@@ -4,22 +4,32 @@ import { ownsTenant, roleAllowed, selectActiveMembership, TenantSelectionRequire
 
 const first = { tenantId: 10, rol: RolTenant.OWNER, tenant: { id: 10, slug: "gym-a", nombre: "Gym A", estado: "activo" } };
 const second = { tenantId: 20, rol: RolTenant.ENTRENADOR, tenant: { id: 20, slug: "gym-b", nombre: "Gym B", estado: "activo" } };
+const trial = { tenantId: 30, rol: RolTenant.OWNER, tenant: { id: 30, slug: "gym-trial", nombre: "Gym Trial", estado: "prueba" } };
+const suspended = { tenantId: 40, rol: RolTenant.OWNER, tenant: { id: 40, slug: "gym-off", nombre: "Gym Off", estado: "suspendido" } };
 
 describe("selección segura de tenant", () => {
-  it("elige automáticamente el único tenant activo", () => {
+  it("elige automáticamente el único tenant habilitado", () => {
     expect(selectActiveMembership([first], null)?.tenantId).toBe(10);
   });
 
-  it("exige selección cuando existen varias membresías", () => {
-    expect(() => selectActiveMembership([first, second], null)).toThrow(TenantSelectionRequiredError);
+  it("permite tenants en período de prueba", () => {
+    expect(selectActiveMembership([trial], null)?.tenantId).toBe(30);
+  });
+
+  it("exige selección cuando existen varias membresías habilitadas", () => {
+    expect(() => selectActiveMembership([first, trial], null)).toThrow(TenantSelectionRequiredError);
   });
 
   it("rechaza un tenant que no pertenece al usuario", () => {
     expect(selectActiveMembership([first, second], 999)).toBeNull();
   });
 
-  it("acepta solamente la membresía seleccionada y activa", () => {
+  it("acepta la membresía habilitada seleccionada", () => {
     expect(selectActiveMembership([first, second], 20)?.rol).toBe(RolTenant.ENTRENADOR);
+  });
+
+  it("rechaza tenants suspendidos", () => {
+    expect(selectActiveMembership([suspended], null)).toBeNull();
   });
 });
 
