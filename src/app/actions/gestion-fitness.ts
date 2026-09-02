@@ -7,8 +7,22 @@ import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
 import { getStaffMemberScope } from "@/lib/staff-member-access";
 import { writeAudit } from "@/lib/audit";
+import { canOperateClass, canUseBranchForClass, memberSharesClassBranch, type ClassStaffRole } from "@/lib/class-operations-policy";
 
 const staffRoles = [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION, RolTenant.ENTRENADOR];
+
+function classRole(role: RolTenant) {
+  return role as ClassStaffRole;
+}
+
+async function trainerProfileId(tenantId: number, userId: string, role: RolTenant) {
+  if (role !== RolTenant.ENTRENADOR) return null;
+  const profile = await prisma.perfilEntrenador.findFirst({
+    where: { tenantId, userId, estado: "activo" },
+    select: { id: true },
+  });
+  return profile?.id ?? null;
+}
 
 export async function getDashboardEntrenador() {
   try {
@@ -34,13 +48,45 @@ export async function getClasesAdmin() {
   try {
     const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
-    const hasScopedBranches = context.role === RolTenant.RECEPCION || context.role === RolTenant.ENTRENADOR;
-    const profile = context.role === RolTenant.ENTRENADOR ? await prisma.perfilEntrenador.findFirst({ where: { tenantId: context.tenantId, userId: context.userId, estado: "activo" }, select: { id: true } }) : null;
+    const hasScopedBranch = context.role === RolTenant.RECEPCION || context.role === RolTenant.ENTRENADOR;
+    const profileId = await trainerProfileId(context.tenantId, context.userId, context.role);
+    const activeBranchId = hasScopedBranch ? context.branchId ?? -1 : null;
+
     const [classes, classTypes, branches, trainers] = await Promise.all([
-      prisma.clase.findMany({ where: { tenantId: context.tenantId, inicio: { gte: new Date(Date.now() - 30 * 86400000), lte: new Date(Date.now() + 120 * 86400000) }, ...(context.role === RolTenant.ENTRENADOR ? { entrenadorId: profile?.id ?? -1 } : {}) }, include: { tipoClase: true, sucursal: true, entrenador: { include: { user: { select: { name: true } } } }, reservas: { where: { estado: { in: ["confirmada", "espera", "asistio"] } }, include: { cliente: { select: { id: true, nombre: true, apellido: true, documento: true } } }, orderBy: [{ posicionEspera: "asc" }, { creadaEn: "asc" }] } }, orderBy: { inicio: "asc" }, take: 250 }),
+      prisma.clase.findMany({
+        where: {
+          tenantId: context.tenantId,
+          inicio: { gte: new Date(Date.now() - 30 * 86400000), lte: new Date(Date.now() + 120 * 86400000) },
+          ...(hasScopedBranch ? { sucursalId: activeBranchId ?? -1 } : {}),
+          ...(context.role === RolTenant.ENTRENADOR ? { entrenadorId: profileId ?? -1 } : {}),
+        },
+        include: {
+          tipoClase: true,
+          sucursal: true,
+          entrenador: { include: { user: { select: { name: true } } } },
+          reservas: {
+            where: { estado: { in: ["confirmada", "espera", "asistio"] } },
+            include: { cliente: { select: { id: true, nombre: true, apellido: true, documento: true } } },
+            orderBy: [{ posicionEspera: "asc" }, { creadaEn: "asc" }],
+          },
+        },
+        orderBy: { inicio: "asc" },
+        take: 250,
+      }),
       prisma.tipoClase.findMany({ where: { tenantId: context.tenantId, activo: true }, orderBy: { nombre: "asc" } }),
-      prisma.sucursal.findMany({ where: { tenantId: context.tenantId, estado: "activo", ...(hasScopedBranches ? { usuarios: { some: { id: context.userId } } } : {}) }, orderBy: { nombre: "asc" } }),
-      prisma.perfilEntrenador.findMany({ where: { tenantId: context.tenantId, estado: "activo" }, include: { user: { select: { name: true } } }, orderBy: { user: { name: "asc" } } }),
+      prisma.sucursal.findMany({
+        where: { tenantId: context.tenantId, estado: "activo", ...(hasScopedBranch ? { id: activeBranchId ?? -1 } : {}) },
+        orderBy: { nombre: "asc" },
+      }),
+      prisma.perfilEntrenador.findMany({
+        where: {
+          tenantId: context.tenantId,
+          estado: "activo",
+          ...(hasScopedBranch ? { sucursales: { some: { id: activeBranchId ?? -1 } } } : {}),
+        },
+        include: { user: { select: { name: true } } },
+        orderBy: { user: { name: "asc" } },
+      }),
     ]);
     return { success: true, data: serializeData({ classes, classTypes, branches, trainers }) };
   } catch (error) {
@@ -52,18 +98,26 @@ const classSchema = z.object({ tipoClaseId: z.number().int().positive(), entrena
 
 export async function crearClase(input: z.input<typeof classSchema>) {
   try {
-    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION, RolTenant.ENTRENADOR] });
+    const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
     const data = classSchema.parse(input);
-    const hasScopedBranches = context.role === RolTenant.RECEPCION || context.role === RolTenant.ENTRENADOR;
-    const ownTrainer = context.role === RolTenant.ENTRENADOR ? await prisma.perfilEntrenador.findFirst({ where: { tenantId: context.tenantId, userId: context.userId, estado: "activo" }, select: { id: true } }) : null;
-    if (context.role === RolTenant.ENTRENADOR && data.entrenadorId !== ownTrainer?.id) return { success: false, error: "Sólo podés programar tus propias clases" };
+    const role = classRole(context.role);
+    if (!canUseBranchForClass(role, context.branchId, data.sucursalId)) {
+      return { success: false, error: "Sólo podés programar clases en la sede activa" };
+    }
+
+    const ownTrainer = await trainerProfileId(context.tenantId, context.userId, context.role);
+    if (context.role === RolTenant.ENTRENADOR && data.entrenadorId !== ownTrainer) {
+      return { success: false, error: "Sólo podés programar tus propias clases" };
+    }
+
     const [type, branch, trainer] = await Promise.all([
       prisma.tipoClase.findFirst({ where: { id: data.tipoClaseId, tenantId: context.tenantId, activo: true }, select: { id: true } }),
-      prisma.sucursal.findFirst({ where: { id: data.sucursalId, tenantId: context.tenantId, estado: "activo", ...(hasScopedBranches ? { usuarios: { some: { id: context.userId } } } : {}) }, select: { id: true } }),
-      data.entrenadorId ? prisma.perfilEntrenador.findFirst({ where: { id: data.entrenadorId, tenantId: context.tenantId, estado: "activo" }, select: { id: true } }) : null,
+      prisma.sucursal.findFirst({ where: { id: data.sucursalId, tenantId: context.tenantId, estado: "activo" }, select: { id: true } }),
+      data.entrenadorId ? prisma.perfilEntrenador.findFirst({ where: { id: data.entrenadorId, tenantId: context.tenantId, estado: "activo", sucursales: { some: { id: data.sucursalId } } }, select: { id: true } }) : null,
     ]);
     if (!type || !branch || (data.entrenadorId && !trainer)) return { success: false, error: "La clase contiene relaciones no autorizadas" };
+
     const gymClass = await prisma.clase.create({ data: { tenantId: context.tenantId, ...data, sala: data.sala || null } });
     await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "clase.crear", entidad: "Clase", entidadId: gymClass.id, metadata: { sucursalId: data.sucursalId, tipoClaseId: data.tipoClaseId, inicio: data.inicio, cupoMaximo: data.cupoMaximo } });
     return { success: true, data: serializeData(gymClass) };
@@ -77,20 +131,27 @@ export async function actualizarClase(claseId: number, input: z.input<typeof cla
     const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
     const id = z.number().int().positive().parse(claseId); const data = classSchema.parse(input);
-    const hasScopedBranches = context.role === RolTenant.RECEPCION || context.role === RolTenant.ENTRENADOR;
-    const profile = context.role === RolTenant.ENTRENADOR ? await prisma.perfilEntrenador.findFirst({ where: { tenantId: context.tenantId, userId: context.userId, estado: "activo" }, select: { id: true } }) : null;
-    const existing = await prisma.clase.findFirst({ where: { id, tenantId: context.tenantId, ...(context.role === RolTenant.ENTRENADOR ? { entrenadorId: profile?.id ?? -1 } : {}) }, select: { id: true, estado: true, inicio: true, tipoClaseId: true, sucursalId: true, entrenadorId: true, sala: true, reservas: { where: { estado: { in: ["confirmada", "espera"] } }, select: { clienteId: true } } } });
-    if (!existing) return { success: false, error: "Clase no encontrada" };
+    const profileId = await trainerProfileId(context.tenantId, context.userId, context.role);
+    const existing = await prisma.clase.findFirst({
+      where: { id, tenantId: context.tenantId },
+      select: { id: true, estado: true, inicio: true, tipoClaseId: true, sucursalId: true, entrenadorId: true, sala: true, reservas: { where: { estado: { in: ["confirmada", "espera"] } }, select: { clienteId: true } } },
+    });
+    if (!existing || !canOperateClass({ role: classRole(context.role), activeBranchId: context.branchId, trainerProfileId: profileId, classBranchId: existing.sucursalId, classTrainerId: existing.entrenadorId })) {
+      return { success: false, error: "Clase no encontrada o no autorizada" };
+    }
     if (existing.estado === "cancelada") return { success: false, error: "Una clase cancelada no puede editarse" };
-    if (context.role === RolTenant.ENTRENADOR && data.entrenadorId !== profile?.id) return { success: false, error: "Sólo podés administrar tus propias clases" };
+    if (!canUseBranchForClass(classRole(context.role), context.branchId, data.sucursalId)) return { success: false, error: "Sólo podés mover la clase dentro de la sede activa" };
+    if (context.role === RolTenant.ENTRENADOR && data.entrenadorId !== profileId) return { success: false, error: "Sólo podés administrar tus propias clases" };
+
     const [type, branch, trainer, confirmed] = await Promise.all([
       prisma.tipoClase.findFirst({ where: { id: data.tipoClaseId, tenantId: context.tenantId, activo: true }, select: { id: true } }),
-      prisma.sucursal.findFirst({ where: { id: data.sucursalId, tenantId: context.tenantId, estado: "activo", ...(hasScopedBranches ? { usuarios: { some: { id: context.userId } } } : {}) }, select: { id: true } }),
-      data.entrenadorId ? prisma.perfilEntrenador.findFirst({ where: { id: data.entrenadorId, tenantId: context.tenantId, estado: "activo" }, select: { id: true } }) : null,
+      prisma.sucursal.findFirst({ where: { id: data.sucursalId, tenantId: context.tenantId, estado: "activo" }, select: { id: true } }),
+      data.entrenadorId ? prisma.perfilEntrenador.findFirst({ where: { id: data.entrenadorId, tenantId: context.tenantId, estado: "activo", sucursales: { some: { id: data.sucursalId } } }, select: { id: true } }) : null,
       prisma.reservaClase.count({ where: { tenantId: context.tenantId, claseId: id, estado: { in: ["confirmada", "asistio"] } } }),
     ]);
     if (!type || !branch || (data.entrenadorId && !trainer)) return { success: false, error: "La clase contiene relaciones no autorizadas" };
     if (data.cupoMaximo < confirmed) return { success: false, error: `El cupo no puede ser menor a las ${confirmed} reservas confirmadas` };
+
     const scheduleChanged = existing.inicio.getTime() !== data.inicio.getTime() || existing.tipoClaseId !== data.tipoClaseId || existing.sucursalId !== data.sucursalId || existing.entrenadorId !== data.entrenadorId || (existing.sala || "") !== (data.sala || "");
     const gymClass = await prisma.$transaction(async (tx) => {
       const updated = await tx.clase.update({ where: { id }, data: { ...data, sala: data.sala || null } });
@@ -107,10 +168,16 @@ export async function cancelarClaseAdmin(claseId: number) {
     const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
     const id = z.number().int().positive().parse(claseId);
-    const profile = context.role === RolTenant.ENTRENADOR ? await prisma.perfilEntrenador.findFirst({ where: { tenantId: context.tenantId, userId: context.userId, estado: "activo" }, select: { id: true } }) : null;
+    const profileId = await trainerProfileId(context.tenantId, context.userId, context.role);
+
     const affected = await prisma.$transaction(async (tx) => {
-      const gymClass = await tx.clase.findFirst({ where: { id, tenantId: context.tenantId, estado: "programada", ...(context.role === RolTenant.ENTRENADOR ? { entrenadorId: profile?.id ?? -1 } : {}) }, include: { tipoClase: { select: { nombre: true } }, reservas: { where: { estado: { in: ["confirmada", "espera"] } }, select: { id: true, clienteId: true } } } });
-      if (!gymClass) throw new Error("Clase no encontrada o ya cancelada");
+      const gymClass = await tx.clase.findFirst({
+        where: { id, tenantId: context.tenantId, estado: "programada" },
+        include: { tipoClase: { select: { nombre: true } }, reservas: { where: { estado: { in: ["confirmada", "espera"] } }, select: { id: true, clienteId: true } } },
+      });
+      if (!gymClass || !canOperateClass({ role: classRole(context.role), activeBranchId: context.branchId, trainerProfileId: profileId, classBranchId: gymClass.sucursalId, classTrainerId: gymClass.entrenadorId })) {
+        throw new Error("Clase no encontrada, no autorizada o ya cancelada");
+      }
       await tx.clase.update({ where: { id }, data: { estado: "cancelada" } });
       await tx.reservaClase.updateMany({ where: { claseId: id, tenantId: context.tenantId, estado: { in: ["confirmada", "espera"] } }, data: { estado: "cancelada", canceladaEn: new Date(), posicionEspera: null } });
       if (gymClass.reservas.length) await tx.notificacion.createMany({ data: gymClass.reservas.map((booking) => ({ tenantId: context.tenantId, clienteId: booking.clienteId, tipo: "clase_cancelada", titulo: "Clase cancelada", mensaje: `La clase ${gymClass.tipoClase.nombre} fue cancelada.` })) });
@@ -126,55 +193,52 @@ export async function registrarAsistenciaClase(reservaId: number, asistio: boole
     const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
     const id = z.number().int().positive().parse(reservaId);
+    const profileId = await trainerProfileId(context.tenantId, context.userId, context.role);
 
     const reserva = await prisma.reservaClase.findFirst({
       where: { id, tenantId: context.tenantId },
       include: { cliente: true, clase: { include: { tipoClase: true } } },
     });
-    if (!reserva) return { success: false, error: "Reserva no encontrada" };
+    if (!reserva || !canOperateClass({ role: classRole(context.role), activeBranchId: context.branchId, trainerProfileId: profileId, classBranchId: reserva.clase.sucursalId, classTrainerId: reserva.clase.entrenadorId })) {
+      return { success: false, error: "Reserva no encontrada o no autorizada" };
+    }
+    if (!["confirmada", "asistio"].includes(reserva.estado)) return { success: false, error: "Sólo se puede registrar asistencia sobre una reserva confirmada" };
 
     const nuevoEstado = asistio ? "asistio" : "confirmada";
     const updated = await prisma.$transaction(async (tx) => {
       const u = await tx.reservaClase.update({
         where: { id },
-        data: {
-          estado: nuevoEstado,
-          asistenciaEn: asistio ? new Date() : null,
-        },
+        data: { estado: nuevoEstado, asistenciaEn: asistio ? new Date() : null },
       });
 
-      if (asistio) {
-        // Otorgar puntos por asistencia a clase si hay regla configurada
-        const regla = await tx.reglaPuntos.findUnique({
-          where: { tenantId_evento: { tenantId: context.tenantId, evento: "asistencia_clase" } },
+      if (asistio && reserva.estado !== "asistio") {
+        const referencia = `clase:${reserva.claseId}`;
+        const alreadyGranted = await tx.movimientoPuntos.findFirst({
+          where: { tenantId: context.tenantId, clienteId: reserva.clienteId, tipo: "clase", referencia },
+          select: { id: true },
         });
-        const puntos = regla?.activo ? regla.puntos : 15;
-        if (puntos > 0) {
-          await tx.movimientoPuntos.create({
-            data: {
-              tenantId: context.tenantId,
-              clienteId: reserva.clienteId,
-              puntos,
-              tipo: "clase",
-              concepto: `Asistencia a clase: ${reserva.clase.tipoClase.nombre}`,
-              referencia: `clase:${reserva.claseId}`,
-            },
-          });
+        if (!alreadyGranted) {
+          const regla = await tx.reglaPuntos.findUnique({ where: { tenantId_evento: { tenantId: context.tenantId, evento: "asistencia_clase" } } });
+          const puntos = regla?.activo ? regla.puntos : 15;
+          if (puntos > 0) {
+            await tx.movimientoPuntos.create({
+              data: {
+                tenantId: context.tenantId,
+                clienteId: reserva.clienteId,
+                puntos,
+                tipo: "clase",
+                concepto: `Asistencia a clase: ${reserva.clase.tipoClase.nombre}`,
+                referencia,
+              },
+            });
+          }
         }
       }
 
       return u;
     });
 
-    await writeAudit({
-      tenantId: context.tenantId,
-      actorUserId: context.userId,
-      accion: "clase.asistencia",
-      entidad: "ReservaClase",
-      entidadId: id,
-      metadata: { clienteId: reserva.clienteId, asistio },
-    });
-
+    await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "clase.asistencia", entidad: "ReservaClase", entidadId: id, metadata: { clienteId: reserva.clienteId, asistio } });
     return { success: true, data: serializeData(updated) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "No se pudo registrar asistencia" };
@@ -185,37 +249,36 @@ export async function administrarReservaManual(claseId: number, clienteId: numbe
   try {
     const context = await requireStaffContext({ roles: staffRoles });
     await requireTenantModule(context.tenantId, "clases");
+    const profileId = await trainerProfileId(context.tenantId, context.userId, context.role);
 
     const gymClass = await prisma.clase.findFirst({
       where: { id: claseId, tenantId: context.tenantId, estado: "programada" },
       include: { tipoClase: true },
     });
-    if (!gymClass) return { success: false, error: "Clase no disponible" };
+    if (!gymClass || !canOperateClass({ role: classRole(context.role), activeBranchId: context.branchId, trainerProfileId: profileId, classBranchId: gymClass.sucursalId, classTrainerId: gymClass.entrenadorId })) {
+      return { success: false, error: "Clase no disponible o no autorizada" };
+    }
 
     const cliente = await prisma.cliente.findFirst({
       where: { id: clienteId, tenantId: context.tenantId, estado: "activo" },
+      select: { id: true, sucursales: { select: { id: true } } },
     });
     if (!cliente) return { success: false, error: "Socio no encontrado o inactivo" };
+    if (!memberSharesClassBranch(gymClass.sucursalId, cliente.sucursales.map(({ id }) => id))) {
+      return { success: false, error: "El socio no tiene acceso asignado a la sede de esta clase" };
+    }
 
     if (accion === "inscribir") {
-      const confirmed = await prisma.reservaClase.count({
-        where: { claseId, estado: { in: ["confirmada", "asistio"] } },
-      });
+      const confirmed = await prisma.reservaClase.count({ where: { tenantId: context.tenantId, claseId, estado: { in: ["confirmada", "asistio"] } } });
       const hasRoom = confirmed < gymClass.cupoMaximo;
       const estado = hasRoom ? "confirmada" : "espera";
-      const waitingCount = await prisma.reservaClase.count({ where: { claseId, estado: "espera" } });
+      const waitingCount = await prisma.reservaClase.count({ where: { tenantId: context.tenantId, claseId, estado: "espera" } });
       const posicionEspera = hasRoom ? null : waitingCount + 1;
 
       const reserva = await prisma.reservaClase.upsert({
         where: { claseId_clienteId: { claseId, clienteId } },
         update: { estado, posicionEspera, canceladaEn: null },
-        create: {
-          tenantId: context.tenantId,
-          claseId,
-          clienteId,
-          estado,
-          posicionEspera,
-        },
+        create: { tenantId: context.tenantId, claseId, clienteId, estado, posicionEspera },
       });
 
       await prisma.notificacion.create({
@@ -224,65 +287,43 @@ export async function administrarReservaManual(claseId: number, clienteId: numbe
           clienteId,
           tipo: "reserva_manual",
           titulo: estado === "confirmada" ? "¡Inscripción confirmada!" : "En lista de espera",
-          mensaje: `Recepción te inscribió en la clase de ${gymClass.tipoClase.nombre}.`,
+          mensaje: `El gimnasio te inscribió en la clase de ${gymClass.tipoClase.nombre}.`,
         },
       });
 
-      await writeAudit({
-        tenantId: context.tenantId,
-        actorUserId: context.userId,
-        accion: "reserva.admin_inscribir",
-        entidad: "ReservaClase",
-        entidadId: reserva.id,
-        metadata: { claseId, clienteId, estado },
-      });
-
+      await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "reserva.admin_inscribir", entidad: "ReservaClase", entidadId: reserva.id, metadata: { claseId, clienteId, estado } });
       return { success: true, data: serializeData(reserva), mensaje: estado === "confirmada" ? "Inscripción confirmada" : "Inscrito en lista de espera" };
-    } else {
-      const existing = await prisma.reservaClase.findFirst({
-        where: { claseId, clienteId, tenantId: context.tenantId, estado: { in: ["confirmada", "espera"] } },
-      });
-      if (!existing) return { success: false, error: "El socio no tiene reserva activa en esta clase" };
-
-      const wasConfirmed = existing.estado === "confirmada";
-      await prisma.reservaClase.update({
-        where: { id: existing.id },
-        data: { estado: "cancelada", canceladaEn: new Date(), posicionEspera: null },
-      });
-
-      if (wasConfirmed) {
-        const next = await prisma.reservaClase.findFirst({
-          where: { claseId, tenantId: context.tenantId, estado: "espera" },
-          orderBy: [{ posicionEspera: "asc" }, { creadaEn: "asc" }],
-        });
-        if (next) {
-          await prisma.reservaClase.update({
-            where: { id: next.id },
-            data: { estado: "confirmada", posicionEspera: null },
-          });
-          await prisma.notificacion.create({
-            data: {
-              tenantId: context.tenantId,
-              clienteId: next.clienteId,
-              tipo: "reserva_confirmada",
-              titulo: "¡Se liberó tu lugar!",
-              mensaje: `Tu reserva para ${gymClass.tipoClase.nombre} pasó a confirmada.`,
-            },
-          });
-        }
-      }
-
-      await writeAudit({
-        tenantId: context.tenantId,
-        actorUserId: context.userId,
-        accion: "reserva.admin_cancelar",
-        entidad: "ReservaClase",
-        entidadId: existing.id,
-        metadata: { claseId, clienteId },
-      });
-
-      return { success: true, mensaje: "Reserva cancelada correctamente" };
     }
+
+    const existing = await prisma.reservaClase.findFirst({
+      where: { claseId, clienteId, tenantId: context.tenantId, estado: { in: ["confirmada", "espera"] } },
+    });
+    if (!existing) return { success: false, error: "El socio no tiene reserva activa en esta clase" };
+
+    const wasConfirmed = existing.estado === "confirmada";
+    await prisma.reservaClase.update({ where: { id: existing.id }, data: { estado: "cancelada", canceladaEn: new Date(), posicionEspera: null } });
+
+    if (wasConfirmed) {
+      const next = await prisma.reservaClase.findFirst({
+        where: { claseId, tenantId: context.tenantId, estado: "espera" },
+        orderBy: [{ posicionEspera: "asc" }, { creadaEn: "asc" }],
+      });
+      if (next) {
+        await prisma.reservaClase.update({ where: { id: next.id }, data: { estado: "confirmada", posicionEspera: null } });
+        await prisma.notificacion.create({
+          data: {
+            tenantId: context.tenantId,
+            clienteId: next.clienteId,
+            tipo: "reserva_confirmada",
+            titulo: "¡Se liberó tu lugar!",
+            mensaje: `Tu reserva para ${gymClass.tipoClase.nombre} pasó a confirmada.`,
+          },
+        });
+      }
+    }
+
+    await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "reserva.admin_cancelar", entidad: "ReservaClase", entidadId: existing.id, metadata: { claseId, clienteId } });
+    return { success: true, mensaje: "Reserva cancelada correctamente" };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Error al gestionar reserva" };
   }
