@@ -27,6 +27,26 @@ export function getPlatformHostname() {
   return normalizeRequestHost(process.env.PLATFORM_DOMAIN || `onlygym.${baseDomain}`);
 }
 
+export function resolveRequestTenantSlug(hostValue: string | null) {
+  const hostname = normalizeRequestHost(hostValue);
+  if (!hostname) return null;
+
+  const slug = resolveTenantSlugForHost({
+    hostname,
+    baseDomain: process.env.TENANT_BASE_DOMAIN || "nanoapps.ar",
+    hostMap: process.env.TENANT_HOST_MAP,
+    localDefaultSlug: process.env.DEFAULT_TENANT_SLUG || "onlygym-demo",
+    production: process.env.NODE_ENV === "production",
+  });
+
+  if (!slug || RESERVED_SLUGS.has(slug)) return null;
+  return slug;
+}
+
+export function getTenantSlugFromRequest(request: Request) {
+  return resolveRequestTenantSlug(request.headers.get("x-forwarded-host") || request.headers.get("host"));
+}
+
 export async function getRequestHostname() {
   const requestHeaders = await headers();
   return normalizeRequestHost(
@@ -51,16 +71,5 @@ export async function requirePlatformRequestHost() {
 
 export async function getRequestTenantSlug() {
   const hostname = await getRequestHostname();
-  if (!hostname) return null;
-
-  const slug = resolveTenantSlugForHost({
-    hostname,
-    baseDomain: process.env.TENANT_BASE_DOMAIN || "nanoapps.ar",
-    hostMap: process.env.TENANT_HOST_MAP,
-    localDefaultSlug: process.env.DEFAULT_TENANT_SLUG || "onlygym-demo",
-    production: process.env.NODE_ENV === "production",
-  });
-
-  if (!slug || RESERVED_SLUGS.has(slug)) return null;
-  return slug;
+  return resolveRequestTenantSlug(hostname);
 }
