@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   UserCheck,
 } from "lucide-react";
+import { resolveDashboardArea } from "@/lib/dashboard-navigation";
 
 type Item = {
   href: string;
@@ -51,15 +52,10 @@ const managementItems: Item[] = [
 ];
 
 function groupFor(pathname: string) {
-  if (["/dashboard/entrenamiento", "/dashboard/clases", "/dashboard/entrenadores", "/dashboard/mediciones"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return { label: "Entrenamiento", items: trainingItems };
-  }
-  if (["/dashboard/caja", "/dashboard/productos", "/dashboard/aforo"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return { label: "Operación de sede", items: operationItems };
-  }
-  if (["/dashboard/reportes", "/dashboard/empleados", "/dashboard/configuracion", "/dashboard/seguridad"].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return { label: "Gestión", items: managementItems };
-  }
+  const area = resolveDashboardArea(pathname);
+  if (area === "entrenamiento") return { label: "Entrenamiento", items: trainingItems };
+  if (area === "operacion") return { label: "Operación de sede", items: operationItems };
+  if (area === "gestion") return { label: "Gestión", items: managementItems };
   return null;
 }
 
