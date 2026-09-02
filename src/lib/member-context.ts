@@ -2,8 +2,8 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { cookies, headers } from "next/headers";
-import { resolveTenantSlugForHost } from "@/lib/tenant-host";
+import { cookies } from "next/headers";
+import { getRequestTenantSlug } from "@/lib/request-tenant";
 
 export const MEMBER_SESSION_COOKIE = "onlygym_member_session";
 
@@ -12,24 +12,18 @@ export function hashSessionToken(token: string) {
 }
 
 export async function resolveTenantForMemberLogin() {
-  const requestHeaders = await headers();
-  const hostname = (requestHeaders.get("host") || "localhost").split(":")[0].toLowerCase();
-  const slug = resolveTenantSlugForHost({
-    hostname,
-    baseDomain: process.env.TENANT_BASE_DOMAIN,
-    hostMap: process.env.TENANT_HOST_MAP,
-    localDefaultSlug: process.env.DEFAULT_TENANT_SLUG,
-    production: process.env.NODE_ENV === "production",
-  });
+  const slug = await getRequestTenantSlug();
   if (!slug) return null;
-
   return prisma.tenant.findFirst({
-    where: { slug, estado: "activo" },
+    where: { slug, estado: { in: ["activo", "prueba"] } },
     select: { id: true, slug: true, nombre: true },
   });
 }
 
 export async function requireMemberContext() {
+  const requestTenantSlug = await getRequestTenantSlug();
+  if (!requestTenantSlug) throw new Error("Tenant inválido");
+
   const cookieStore = await cookies();
   const rawToken = cookieStore.get(MEMBER_SESSION_COOKIE)?.value;
   if (!rawToken) throw new Error("No autorizado");
@@ -42,9 +36,17 @@ export async function requireMemberContext() {
     },
   });
 
-  if (!memberSession || memberSession.expiraEn <= new Date() || memberSession.tenant.estado !== "activo" || memberSession.cliente.estado !== "activo" || memberSession.cliente.tenantId !== memberSession.tenantId) {
+  const tenantOperational = memberSession?.tenant.estado === "activo" || memberSession?.tenant.estado === "prueba";
+  if (
+    !memberSession ||
+    memberSession.expiraEn <= new Date() ||
+    !tenantOperational ||
+    memberSession.tenant.slug !== requestTenantSlug ||
+    memberSession.cliente.estado !== "activo" ||
+    memberSession.cliente.tenantId !== memberSession.tenantId
+  ) {
     cookieStore.delete(MEMBER_SESSION_COOKIE);
-    throw new Error("Sesión vencida");
+    throw new Error("Sesión vencida o inválida para este gimnasio");
   }
 
   return {
