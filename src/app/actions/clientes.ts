@@ -33,33 +33,34 @@ export async function getClientes() {
 }
 
 /**
- * Obtiene clientes con paginación, filtros avanzados y estado de membresía en tiempo real
+ * Obtiene clientes con paginación, filtros avanzados y estado de membresía en tiempo real.
+ * La paginación se aplica después de calcular el estado de la última membresía para que
+ * los filtros y totales sean coherentes entre páginas.
  */
 export async function getClientesPaginados(params: {
   page?: number;
   limit?: number;
   search?: string;
-  estado?: string; // 'todos', 'activo', 'inactivo', 'al_dia', 'vencido', 'vencen_pronto'
+  estado?: string; // todos, activo, inactivo, al_dia, vencido, vencen_pronto
   sucursalId?: number;
 }) {
   try {
-    const context = await requireStaffContext({ ...(params.sucursalId ? { branchId: params.sucursalId } : {}), roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    const context = await requireStaffContext({
+      ...(params.sucursalId ? { branchId: params.sucursalId } : {}),
+      roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION],
+    });
     await requireTenantModule(context.tenantId, "socios");
+
     const page = Math.max(1, params.page || 1);
     const limit = Math.min(100, Math.max(5, params.limit || 15));
     const skip = (page - 1) * limit;
-
     const where: Prisma.ClienteWhereInput = { tenantId: context.tenantId };
 
-    // Filtro por sucursal
     if (params.sucursalId) {
-      where.sucursales = {
-        some: { id: params.sucursalId },
-      };
+      where.sucursales = { some: { id: params.sucursalId } };
     }
 
-    // Filtro de búsqueda por texto
-    if (params.search && params.search.trim() !== "") {
+    if (params.search?.trim()) {
       const q = params.search.trim();
       where.OR = [
         { documento: { contains: q, mode: "insensitive" } },
@@ -70,34 +71,24 @@ export async function getClientesPaginados(params: {
       ];
     }
 
-    const hoy = new Date();
-    // Filtros de estado
-    if (params.estado === "activo") {
-      where.estado = "activo";
-    } else if (params.estado === "inactivo") {
-      where.estado = "inactivo";
-    }
+    if (params.estado === "activo") where.estado = "activo";
+    if (params.estado === "inactivo") where.estado = "inactivo";
 
-    const [total, clientesDb] = await Promise.all([
-      prisma.cliente.count({ where }),
-      prisma.cliente.findMany({
-        where,
-        include: {
-          pagos: {
-            orderBy: { fechaVencimiento: "desc" },
-            take: 1,
-            include: { membresia: true },
-          },
-          cuentaCorriente: true,
+    const clientesDb = await prisma.cliente.findMany({
+      where,
+      include: {
+        pagos: {
+          orderBy: { fechaVencimiento: "desc" },
+          take: 1,
+          include: { membresia: true },
         },
-        orderBy: { nombre: "asc" },
-        skip,
-        take: limit,
-      }),
-    ]);
+        cuentaCorriente: true,
+      },
+      orderBy: [{ nombre: "asc" }, { apellido: "asc" }],
+    });
 
-    // Mapear y calcular estados
-    let items = clientesDb.map((c) => {
+    const hoy = new Date();
+    let filteredItems = clientesDb.map((c) => {
       const ultimoPago = c.pagos?.[0];
       let estadoMembresia: "AL_DIA" | "VENCIDO" = "VENCIDO";
       let diasRestantes = 0;
@@ -112,9 +103,7 @@ export async function getClientesPaginados(params: {
           estadoMembresia = "AL_DIA";
           const diff = vencimientoDate.getTime() - hoy.getTime();
           diasRestantes = Math.ceil(diff / (1000 * 60 * 60 * 24));
-          if (diasRestantes <= 7) {
-            vencenPronto = true;
-          }
+          vencenPronto = diasRestantes <= 7;
         }
       }
 
@@ -139,25 +128,25 @@ export async function getClientesPaginados(params: {
       };
     });
 
-    // Filtros de estado de membresía post-query si se solicitan
     if (params.estado === "al_dia") {
-      items = items.filter((i) => i.estadoMembresia === "AL_DIA");
+      filteredItems = filteredItems.filter((item) => item.estadoMembresia === "AL_DIA");
     } else if (params.estado === "vencido") {
-      items = items.filter((i) => i.estadoMembresia === "VENCIDO");
+      filteredItems = filteredItems.filter((item) => item.estadoMembresia === "VENCIDO" && item.fechaVencimiento !== null);
     } else if (params.estado === "vencen_pronto") {
-      items = items.filter((i) => i.vencenPronto || i.estadoMembresia === "VENCIDO");
+      filteredItems = filteredItems.filter((item) => item.estadoMembresia === "AL_DIA" && item.vencenPronto);
     }
+
+    const total = filteredItems.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const safePage = Math.min(page, totalPages);
+    const safeSkip = (safePage - 1) * limit;
+    const items = filteredItems.slice(safeSkip, safeSkip + limit);
 
     return {
       success: true,
       data: serializeData({
         items,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit) || 1,
-        },
+        pagination: { total, page: safePage, limit, totalPages },
       }),
     };
   } catch (error) {
@@ -167,7 +156,7 @@ export async function getClientesPaginados(params: {
 }
 
 /**
- * Crea un socio nuevo con creación 3-en-1 (Cliente, UsuarioCliente DNI/123456 y CuentaCorriente $0)
+ * Crea un socio nuevo con perfil, credencial de portal y cuenta corriente.
  */
 export async function createCliente(data: ClienteData & { sucursalesIds?: number[] }) {
   const result = clienteSchema.safeParse(data);
@@ -183,13 +172,21 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
     const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
     await requireTenantModule(context.tenantId, "socios");
     const cleanDoc = result.data.documento.trim();
-    const allowedBranches = data.sucursalesIds?.length ? await prisma.sucursal.findMany({ where: { tenantId: context.tenantId, id: { in: data.sucursalesIds } }, select: { id: true } }) : [];
-    if (data.sucursalesIds?.length && allowedBranches.length !== new Set(data.sucursalesIds).size) return { success: false, error: "Una sucursal no pertenece al gimnasio" };
+    const allowedBranches = data.sucursalesIds?.length
+      ? await prisma.sucursal.findMany({
+          where: { tenantId: context.tenantId, id: { in: data.sucursalesIds } },
+          select: { id: true },
+        })
+      : [];
+
+    if (data.sucursalesIds?.length && allowedBranches.length !== new Set(data.sucursalesIds).size) {
+      return { success: false, error: "Una sucursal no pertenece al gimnasio" };
+    }
+
     const temporaryPassword = temporaryMemberPassword();
     const initialPassword = await hash(temporaryPassword, 12);
 
     const clienteCreado = await prisma.$transaction(async (tx) => {
-      // 1. Crear el Cliente
       const cliente = await tx.cliente.create({
         data: {
           tenantId: context.tenantId,
@@ -201,13 +198,12 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
           direccion: result.data.direccion?.trim() || null,
           foto: result.data.foto || null,
           estado: result.data.estado || "activo",
-          sucursales: data.sucursalesIds && data.sucursalesIds.length > 0
+          sucursales: data.sucursalesIds?.length
             ? { connect: allowedBranches.map(({ id }) => ({ id })) }
             : undefined,
         },
       });
 
-      // 2. Crear automáticamente las credenciales del portal (DNI / 123456)
       await tx.usuarioCliente.create({
         data: {
           tenantId: context.tenantId,
@@ -218,13 +214,8 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
         },
       });
 
-      // 3. Crear automáticamente su Cuenta Corriente con $0 y límite $5000
       await tx.cuentaCorriente.create({
-        data: {
-          clienteId: cliente.id,
-          saldo: 0,
-          limiteCredito: 5000,
-        },
+        data: { clienteId: cliente.id, saldo: 0, limiteCredito: 5000 },
       });
 
       return cliente;
@@ -235,7 +226,13 @@ export async function createCliente(data: ClienteData & { sucursalesIds?: number
     revalidatePath("/dashboard/caja");
     revalidatePath("/molinete");
 
-    await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "socio.crear", entidad: "Cliente", entidadId: clienteCreado.id });
+    await writeAudit({
+      tenantId: context.tenantId,
+      actorUserId: context.userId,
+      accion: "socio.crear",
+      entidad: "Cliente",
+      entidadId: clienteCreado.id,
+    });
     return { success: true, data: serializeData(clienteCreado), temporaryPassword };
   } catch (error: unknown) {
     console.error("Error al crear cliente:", error);
@@ -316,24 +313,27 @@ export async function renovarMembresiaCliente360(data: {
   clienteId: number;
   membresiaId: number;
   sucursalId?: number;
-  metodoPago?: string; // 'efectivo', 'tarjeta', 'transferencia', 'cuenta_corriente'
+  metodoPago?: string;
   monto?: number;
   notas?: string;
   extenderDesdeVencimiento?: boolean;
 }) {
   try {
-    const context = await requireStaffContext({ branchId: data.sucursalId || undefined, roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    const context = await requireStaffContext({
+      branchId: data.sucursalId || undefined,
+      roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION],
+    });
     await requireTenantModule(context.tenantId, "membresias");
-    const { clienteId, membresiaId, sucursalId = 1, metodoPago = "efectivo", notas, extenderDesdeVencimiento = true } = data;
+
+    const { clienteId, membresiaId, metodoPago = "efectivo", notas, extenderDesdeVencimiento = true } = data;
+    const sucursalId = data.sucursalId ?? context.branchId;
+    if (!sucursalId) return { success: false, error: "Seleccioná una sede antes de registrar el cobro" };
 
     const [cliente, membresia] = await Promise.all([
       prisma.cliente.findFirst({
         where: { id: clienteId, tenantId: context.tenantId },
         include: {
-          pagos: {
-            orderBy: { fechaVencimiento: "desc" },
-            take: 1,
-          },
+          pagos: { orderBy: { fechaVencimiento: "desc" }, take: 1 },
           cuentaCorriente: true,
         },
       }),
@@ -347,22 +347,17 @@ export async function renovarMembresiaCliente360(data: {
 
     const montoFinal = data.monto !== undefined ? data.monto : Number(membresia.precio);
     const hoy = new Date();
-
-    // Calcular fecha de vencimiento:
-    // Si extenderDesdeVencimiento es true y el último vencimiento es futuro, sumar días desde esa fecha; sino desde hoy.
     let baseDate = new Date();
     const ultimoPago = cliente.pagos?.[0];
+
     if (extenderDesdeVencimiento && ultimoPago) {
       const ultVenc = new Date(ultimoPago.fechaVencimiento);
-      if (ultVenc > hoy) {
-        baseDate = new Date(ultVenc);
-      }
+      if (ultVenc > hoy) baseDate = new Date(ultVenc);
     }
 
     const fechaVencimiento = new Date(baseDate.getTime() + membresia.diasDuracion * 24 * 60 * 60 * 1000);
 
     const pagoRegistrado = await prisma.$transaction(async (tx) => {
-      // 1. Crear el pago
       const nuevoPago = await tx.pago.create({
         data: {
           tenantId: context.tenantId,
@@ -376,28 +371,18 @@ export async function renovarMembresiaCliente360(data: {
           estado: "pagado",
           notas: notas || `Renovación 360 Plan ${membresia.nombre}`,
         },
-        include: {
-          membresia: true,
-          cliente: true,
-        },
+        include: { membresia: true, cliente: true },
       });
 
-      // 2. Si el método de pago es a Cuenta Corriente, sumar el cargo a la deuda
       if (metodoPago === "cuenta_corriente") {
         let cuenta = cliente.cuentaCorriente;
         if (!cuenta) {
-          cuenta = await tx.cuentaCorriente.create({
-            data: { clienteId, saldo: 0, limiteCredito: 5000 },
-          });
+          cuenta = await tx.cuentaCorriente.create({ data: { clienteId, saldo: 0, limiteCredito: 5000 } });
         }
 
         await tx.cuentaCorriente.update({
           where: { id: cuenta.id },
-          data: {
-            saldo: {
-              increment: montoFinal,
-            },
-          },
+          data: { saldo: { increment: montoFinal } },
         });
 
         await tx.cuentaMovimiento.create({
@@ -433,7 +418,7 @@ export async function renovarMembresiaCliente360(data: {
 }
 
 /**
- * Resetea la contraseña del portal de un socio a '123456'
+ * Genera una nueva contraseña temporal para el portal del socio.
  */
 export async function resetPasswordCliente(clienteId: number) {
   try {
@@ -456,6 +441,7 @@ export async function resetPasswordCliente(clienteId: number) {
         prisma.sesionSocio.deleteMany({ where: { tenantId: context.tenantId, clienteId } }),
       ]);
     }
+
     await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: "socio.password_temporal", entidad: "Cliente", entidadId: clienteId });
     return { success: true, mensaje: "Contraseña temporal generada. Las sesiones anteriores fueron cerradas.", temporaryPassword };
   } catch (error) {
@@ -491,11 +477,12 @@ export async function toggleClienteEstado(id: number, estadoActual: string) {
  */
 export async function exportarClientesData(sucursalId?: number) {
   try {
-    const context = await requireStaffContext({ ...(sucursalId ? { branchId: sucursalId } : {}), roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION] });
+    const context = await requireStaffContext({
+      ...(sucursalId ? { branchId: sucursalId } : {}),
+      roles: [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION],
+    });
     const where: Prisma.ClienteWhereInput = { tenantId: context.tenantId };
-    if (sucursalId) {
-      where.sucursales = { some: { id: sucursalId } };
-    }
+    if (sucursalId) where.sucursales = { some: { id: sucursalId } };
 
     const clientes = await prisma.cliente.findMany({
       where,
