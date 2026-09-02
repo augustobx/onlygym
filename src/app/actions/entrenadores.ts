@@ -71,8 +71,14 @@ export async function actualizarEntrenador(trainerId: number, input: z.input<typ
   try {
     const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
     const id = z.number().int().positive().parse(trainerId); const data = trainerProfileSchema.parse(input); const branches = await allowedBranches(context.tenantId, data.sucursalIds);
-    const profile = await prisma.perfilEntrenador.findFirst({ where: { id, tenantId: context.tenantId }, select: { id: true, userId: true } });
+    const profile = await prisma.perfilEntrenador.findFirst({
+      where: { id, tenantId: context.tenantId },
+      select: { id: true, userId: true, user: { select: { name: true, _count: { select: { tenantMemberships: true } } } } },
+    });
     if (!profile) return { success: false, error: "Entrenador no encontrado" };
+    if (profile.user._count.tenantMemberships > 1 && data.name !== profile.user.name) {
+      return { success: false, error: "Esta identidad pertenece a más de un tenant; el nombre global no puede modificarse desde un gimnasio" };
+    }
     const currentTenantBranches = await prisma.sucursal.findMany({ where: { tenantId: context.tenantId, usuarios: { some: { id: profile.userId } } }, select: { id: true } });
     const desiredIds = new Set(branches.map(({ id: branchId }) => branchId));
     const currentIds = new Set(currentTenantBranches.map(({ id: branchId }) => branchId));
@@ -94,7 +100,6 @@ export async function cambiarEstadoEntrenador(trainerId: number, activar: boolea
     await prisma.$transaction([
       prisma.perfilEntrenador.update({ where: { id }, data: { estado } }),
       prisma.tenantUsuario.update({ where: { tenantId_userId: { tenantId: context.tenantId, userId: profile.userId } }, data: { estado } }),
-      ...(activar ? [] : [prisma.session.deleteMany({ where: { userId: profile.userId } })]),
     ]);
     await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: activar ? "entrenador.activar" : "entrenador.pausar", entidad: "PerfilEntrenador", entidadId: id });
     return { success: true };
