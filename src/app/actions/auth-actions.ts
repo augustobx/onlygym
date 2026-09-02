@@ -5,10 +5,14 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getTenantModules, requireStaffContext, setActiveBranchCookie, setActiveTenantCookie } from "@/lib/tenant-context";
 import { getRequestTenantSlug } from "@/lib/request-tenant";
+import { getRequestTenantLifecycle } from "@/lib/tenant-lifecycle";
 
 export async function getMisGimnasios() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return { success: false, error: "No autenticado" };
+
+  const lifecycle = await getRequestTenantLifecycle();
+  if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
 
   const requestTenantSlug = await getRequestTenantSlug();
   if (!requestTenantSlug) return { success: false, error: "Dominio de gimnasio inválido" };
@@ -37,16 +41,18 @@ export async function seleccionarGimnasioActivo(tenantId: number) {
     const membership = await setActiveTenantCookie(tenantId);
     return { success: true, data: { id: membership.tenant.id, nombre: membership.tenant.nombre, slug: membership.tenant.slug } };
   } catch {
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
     return { success: false, error: "Gimnasio no autorizado" };
   }
 }
 
 export async function getMisSucursales() {
   const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) return { success: false, error: "No autenticado" };
 
-  if (!session?.user) {
-    return { success: false, error: "No autenticado" };
-  }
+  const lifecycle = await getRequestTenantLifecycle();
+  if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
 
   try {
     const context = await requireStaffContext();
@@ -73,11 +79,16 @@ export async function seleccionarSucursalActiva(sucursalId: number) {
     await setActiveBranchCookie(sucursalId);
     return { success: true };
   } catch {
+    const lifecycle = await getRequestTenantLifecycle();
+    if (lifecycle.status === "suspended") return { success: false, suspended: true as const, error: "Servicio suspendido" };
     return { success: false, error: "Sucursal no autorizada" };
   }
 }
 
 export async function getStaffNavigationContext() {
+  const lifecycle = await getRequestTenantLifecycle();
+  if (lifecycle.status === "suspended") return { success: false as const, suspended: true as const };
+
   try {
     const context = await requireStaffContext();
     const [modules, user, branch] = await Promise.all([
