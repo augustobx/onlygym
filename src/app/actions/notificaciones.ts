@@ -13,7 +13,7 @@ export async function marcarNotificacionLeida(id: number) {
       data: { leidaEn: new Date() },
     });
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "No autorizado" };
   }
 }
@@ -26,43 +26,56 @@ export async function marcarTodasNotificacionesLeidas() {
       data: { leidaEn: new Date() },
     });
     return { success: true };
-  } catch (error) {
+  } catch {
     return { success: false, error: "No autorizado" };
   }
 }
 
 export async function enviarNotificacionSocio(input: {
-  tenantId: number;
+  tenantId?: number;
   clienteId: number;
   tipo: string;
   titulo: string;
   mensaje: string;
   canal?: "in_app" | "push" | "whatsapp" | "email";
-  datos?: any;
+  datos?: unknown;
 }) {
   try {
-    const notif = await prisma.notificacion.create({
-      data: {
-        tenantId: input.tenantId,
-        clienteId: input.clienteId,
-        tipo: input.tipo,
-        titulo: input.titulo,
-        mensaje: input.mensaje,
-        datos: input.datos || null,
-      },
-    });
+    const context = await requireStaffContext();
+    if (input.tenantId !== undefined && input.tenantId !== context.tenantId) {
+      return { success: false, error: "Tenant no autorizado" };
+    }
 
-    // Registrar en auditoría de envíos de notificación
-    await prisma.registroNotificacion.create({
-      data: {
-        tenantId: input.tenantId,
-        clienteId: input.clienteId,
-        canal: input.canal || "in_app",
-        tipo: input.tipo,
-        titulo: input.titulo,
-        mensaje: input.mensaje,
-        estado: "enviado",
-      },
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: input.clienteId, tenantId: context.tenantId },
+      select: { id: true },
+    });
+    if (!cliente) return { success: false, error: "Socio no encontrado" };
+
+    const notif = await prisma.$transaction(async (tx) => {
+      const notification = await tx.notificacion.create({
+        data: {
+          tenantId: context.tenantId,
+          clienteId: cliente.id,
+          tipo: input.tipo,
+          titulo: input.titulo,
+          mensaje: input.mensaje,
+          datos: input.datos ?? null,
+        },
+      });
+
+      await tx.registroNotificacion.create({
+        data: {
+          tenantId: context.tenantId,
+          clienteId: cliente.id,
+          canal: input.canal || "in_app",
+          tipo: input.tipo,
+          titulo: input.titulo,
+          mensaje: input.mensaje,
+          estado: "enviado",
+        },
+      });
+      return notification;
     });
 
     return { success: true, data: serializeData(notif) };
