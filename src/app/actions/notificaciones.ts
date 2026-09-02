@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { requireMemberContext } from "@/lib/member-context";
 import { requireStaffContext } from "@/lib/tenant-context";
+import type { Prisma } from "@prisma/client";
 
 export async function marcarNotificacionLeida(id: number) {
   try {
@@ -38,7 +39,7 @@ export async function enviarNotificacionSocio(input: {
   titulo: string;
   mensaje: string;
   canal?: "in_app" | "push" | "whatsapp" | "email";
-  datos?: unknown;
+  datos?: Prisma.InputJsonValue;
 }) {
   try {
     const context = await requireStaffContext();
@@ -60,7 +61,7 @@ export async function enviarNotificacionSocio(input: {
           tipo: input.tipo,
           titulo: input.titulo,
           mensaje: input.mensaje,
-          datos: input.datos ?? null,
+          ...(input.datos !== undefined ? { datos: input.datos } : {}),
         },
       });
 
