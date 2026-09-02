@@ -5,7 +5,6 @@ import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
 import { writeAudit } from "@/lib/audit";
 import { z } from "zod";
-import { RolTenant } from "@prisma/client";
 
 /**
  * Calcula la racha real de asistencias consecutivas (días o semanas) para un cliente
@@ -19,7 +18,6 @@ function calcularRachaRealSync(fechasIngresos: Date[]): {
     return { rachaActualDias: 0, rachaActualSemanas: 0, promedioSemanalMes: 0 };
   }
 
-  // Ordenar fechas descendente sin horas (claves de día YYYY-MM-DD)
   const uniqueDays = Array.from(
     new Set(
       fechasIngresos.map((f) => {
@@ -47,7 +45,6 @@ function calcularRachaRealSync(fechasIngresos: Date[]): {
     }
   }
 
-  // Racha por semanas (semanas ISO consecutivas con al menos 1 visita)
   const weeksSet = new Set<string>();
   const oneMonthAgo = new Date(today.getTime() - 30 * 86400000);
   let visitasUltimoMes = 0;
@@ -75,9 +72,6 @@ export async function calcularRachaReal(fechasIngresos: Date[]) {
   return calcularRachaRealSync(fechasIngresos);
 }
 
-/**
- * Evalúa el nivel de riesgo de abandono de un socio
- */
 function evaluarRiesgoAbandonoSync(input: {
   diasInactivo: number;
   diasVencimientoMembresia: number;
@@ -88,8 +82,6 @@ function evaluarRiesgoAbandonoSync(input: {
   motivo: string;
 } {
   const { diasInactivo, diasVencimientoMembresia, visitasUltimos30d, visitasPrevios30d } = input;
-
-  // Caída de frecuencia > 50%
   const caidaFrecuencia = visitasPrevios30d >= 4 && visitasUltimos30d <= visitasPrevios30d * 0.4;
 
   if (diasInactivo >= 14 || (diasInactivo >= 10 && diasVencimientoMembresia <= 3)) {
@@ -114,9 +106,6 @@ export async function evaluarRiesgoAbandono(input: {
   return evaluarRiesgoAbandonoSync(input);
 }
 
-/**
- * Obtiene socios inactivos y con riesgo de abandono para el dashboard y seguimiento comercial
- */
 export async function getSociosEnRiesgo() {
   try {
     const context = await requireStaffContext();
@@ -127,22 +116,21 @@ export async function getSociosEnRiesgo() {
     const hace60d = new Date(now.getTime() - 60 * 86400000);
 
     const clientes = await prisma.cliente.findMany({
-      where: {
-        tenantId: context.tenantId,
-        estado: "activo",
-      },
+      where: { tenantId: context.tenantId, estado: "activo" },
       include: {
         ingresos: {
-          where: { estado: { in: ["permitido", "ACTIVO"] } },
+          where: { tenantId: context.tenantId, estado: { in: ["permitido", "ACTIVO"] } },
           orderBy: { fechaHora: "desc" },
           take: 50,
         },
         pagos: {
+          where: { tenantId: context.tenantId },
           orderBy: { fechaVencimiento: "desc" },
           take: 1,
           include: { membresia: true },
         },
         seguimientos: {
+          where: { tenantId: context.tenantId },
           orderBy: { creadoEn: "desc" },
           take: 1,
         },
@@ -152,21 +140,12 @@ export async function getSociosEnRiesgo() {
     const enRiesgo = clientes.map((cliente) => {
       const ultimoIngreso = cliente.ingresos[0]?.fechaHora ? new Date(cliente.ingresos[0].fechaHora) : null;
       const diasInactivo = ultimoIngreso ? Math.floor((now.getTime() - ultimoIngreso.getTime()) / 86400000) : 99;
-
       const ultimoPago = cliente.pagos[0];
       const fechaVenc = ultimoPago ? new Date(ultimoPago.fechaVencimiento) : null;
       const diasVencimientoMembresia = fechaVenc ? Math.floor((fechaVenc.getTime() - now.getTime()) / 86400000) : -99;
-
       const visitasUltimos30d = cliente.ingresos.filter((i) => new Date(i.fechaHora) >= hace30d).length;
       const visitasPrevios30d = cliente.ingresos.filter((i) => new Date(i.fechaHora) >= hace60d && new Date(i.fechaHora) < hace30d).length;
-
-      const evaluacion = evaluarRiesgoAbandonoSync({
-        diasInactivo,
-        diasVencimientoMembresia,
-        visitasUltimos30d,
-        visitasPrevios30d,
-      });
-
+      const evaluacion = evaluarRiesgoAbandonoSync({ diasInactivo, diasVencimientoMembresia, visitasUltimos30d, visitasPrevios30d });
       const racha = calcularRachaRealSync(cliente.ingresos.map((i) => new Date(i.fechaHora)));
 
       return {
@@ -186,16 +165,11 @@ export async function getSociosEnRiesgo() {
         rachaDias: racha.rachaActualDias,
         promedioSemanal: racha.promedioSemanalMes,
         ultimoSeguimiento: cliente.seguimientos[0]
-          ? {
-              tipo: cliente.seguimientos[0].tipo,
-              estado: cliente.seguimientos[0].estado,
-              creadoEn: cliente.seguimientos[0].creadoEn.toISOString(),
-            }
+          ? { tipo: cliente.seguimientos[0].tipo, estado: cliente.seguimientos[0].estado, creadoEn: cliente.seguimientos[0].creadoEn.toISOString() }
           : null,
       };
     });
 
-    // Filtrar solo los que tienen riesgo Medio, Alto o Crítico y ordenar por gravedad
     const prioritarios = enRiesgo
       .filter((c) => c.nivelRiesgo !== "Bajo")
       .sort((a, b) => {
@@ -233,10 +207,16 @@ export async function registrarSeguimientoComercial(input: z.input<typeof seguim
     await requireTenantModule(context.tenantId, "socios");
     const data = seguimientoSchema.parse(input);
 
+    const cliente = await prisma.cliente.findFirst({
+      where: { id: data.clienteId, tenantId: context.tenantId },
+      select: { id: true },
+    });
+    if (!cliente) return { success: false, error: "Socio no encontrado" };
+
     const seguimiento = await prisma.seguimientoCliente.create({
       data: {
         tenantId: context.tenantId,
-        clienteId: data.clienteId,
+        clienteId: cliente.id,
         usuarioId: context.userId,
         tipo: data.tipo,
         estado: data.estado,
@@ -252,7 +232,7 @@ export async function registrarSeguimientoComercial(input: z.input<typeof seguim
       accion: "seguimiento_comercial.crear",
       entidad: "SeguimientoCliente",
       entidadId: seguimiento.id,
-      metadata: { clienteId: data.clienteId, tipo: data.tipo, estado: data.estado },
+      metadata: { clienteId: cliente.id, tipo: data.tipo, estado: data.estado },
     });
 
     return { success: true, data: serializeData(seguimiento) };
@@ -261,9 +241,6 @@ export async function registrarSeguimientoComercial(input: z.input<typeof seguim
   }
 }
 
-/**
- * Obtiene analítica avanzada de retención, horarios pico y top clases
- */
 export async function getAnaliticaRetencion(periodo: "mes_actual" | "mes_anterior" | "ultimos_90d" = "mes_actual") {
   try {
     const context = await requireStaffContext();
@@ -281,37 +258,22 @@ export async function getAnaliticaRetencion(periodo: "mes_actual" | "mes_anterio
       hasta = now;
     }
 
-    const [ingresosPeriodo, clasesPeriodo, pagosPeriodo, totalClientesActivos] = await Promise.all([
+    const [ingresosPeriodo, clasesPeriodo, totalClientesActivos] = await Promise.all([
       prisma.ingreso.findMany({
-        where: {
-          tenantId: context.tenantId,
-          fechaHora: { gte: desde, lte: hasta },
-          estado: { in: ["permitido", "ACTIVO"] },
-        },
+        where: { tenantId: context.tenantId, fechaHora: { gte: desde, lte: hasta }, estado: { in: ["permitido", "ACTIVO"] } },
         select: { fechaHora: true, clienteId: true },
       }),
       prisma.clase.findMany({
-        where: {
-          tenantId: context.tenantId,
-          inicio: { gte: desde, lte: hasta },
-        },
+        where: { tenantId: context.tenantId, inicio: { gte: desde, lte: hasta } },
         include: {
           tipoClase: true,
           entrenador: { include: { user: { select: { name: true } } } },
           _count: { select: { reservas: { where: { estado: { in: ["confirmada", "asistio"] } } } } },
         },
       }),
-      prisma.pago.findMany({
-        where: {
-          tenantId: context.tenantId,
-          fechaPago: { gte: desde, lte: hasta },
-        },
-        select: { clienteId: true, monto: true },
-      }),
       prisma.cliente.count({ where: { tenantId: context.tenantId, estado: "activo" } }),
     ]);
 
-    // 1. Distribución horaria y Top Horarios
     const horasCount: Record<number, number> = {};
     for (let h = 6; h <= 23; h++) horasCount[h] = 0;
     ingresosPeriodo.forEach((ing) => {
@@ -324,7 +286,6 @@ export async function getAnaliticaRetencion(periodo: "mes_actual" | "mes_anterio
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 5);
 
-    // 2. Top Clases por Ocupación
     const topClases = clasesPeriodo
       .map((c) => ({
         nombre: c.tipoClase.nombre,
@@ -336,7 +297,6 @@ export async function getAnaliticaRetencion(periodo: "mes_actual" | "mes_anterio
       .sort((a, b) => b.ocupacionPromedio - a.ocupacionPromedio)
       .slice(0, 5);
 
-    // 3. Frecuencia promedio y tasa de retención
     const clientesConAsistencia = new Set(ingresosPeriodo.map((i) => i.clienteId)).size;
     const frecuenciaPromedioVisitas = totalClientesActivos > 0 ? (ingresosPeriodo.length / totalClientesActivos).toFixed(1) : "0";
     const tasaRetencionEstimada = totalClientesActivos > 0 ? Math.min(100, Math.round((clientesConAsistencia / totalClientesActivos) * 100)) : 0;
@@ -352,10 +312,7 @@ export async function getAnaliticaRetencion(periodo: "mes_actual" | "mes_anterio
         tasaRetencionEstimada,
         topHorarios,
         topClases,
-        distribucionHoraria: Object.entries(horasCount).map(([hora, cantidad]) => ({
-          hora: `${hora.padStart(2, "0")}:00`,
-          cantidad,
-        })),
+        distribucionHoraria: Object.entries(horasCount).map(([hora, cantidad]) => ({ hora: `${hora.padStart(2, "0")}:00`, cantidad })),
       }),
     };
   } catch (error) {
