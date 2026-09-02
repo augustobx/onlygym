@@ -1,10 +1,11 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
-import { serializeData } from "@/lib/serialize";
-import { requireStaffContext } from "@/lib/tenant-context";
 import { RolTenant } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { serializeData } from "@/lib/serialize";
+import { getStaffMemberScope } from "@/lib/staff-member-access";
+import { requireStaffContext } from "@/lib/tenant-context";
 
 const ACCOUNT_ROLES = [RolTenant.OWNER, RolTenant.ADMIN, RolTenant.RECEPCION];
 
@@ -20,11 +21,32 @@ function revalidateAccountPaths(clienteId?: number) {
   revalidatePath("/portal/dashboard");
 }
 
-export async function getCuentas() {
+async function accountContext() {
+  const context = await requireStaffContext({ roles: ACCOUNT_ROLES });
+  return { context, memberScope: await getStaffMemberScope(context) };
+}
+
+export async function getAccountOperationsContext() {
   try {
     const context = await requireStaffContext({ roles: ACCOUNT_ROLES });
+    return {
+      success: true,
+      data: {
+        role: context.role,
+        branchId: context.branchId,
+        canSetCreditLimit: context.role === RolTenant.OWNER || context.role === RolTenant.ADMIN,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "No autorizado" };
+  }
+}
+
+export async function getCuentas() {
+  try {
+    const { memberScope } = await accountContext();
     const cuentas = await prisma.cuentaCorriente.findMany({
-      where: { cliente: { tenantId: context.tenantId } },
+      where: { cliente: memberScope },
       include: { cliente: true },
       orderBy: { saldo: "desc" },
     });
@@ -45,11 +67,9 @@ export async function getCuentas() {
 export async function registrarPagoCuenta(clienteId: number, monto: number, concepto: string) {
   try {
     if (!validAmount(monto)) return { success: false, error: "Ingresá un monto válido" };
-    const context = await requireStaffContext({ roles: ACCOUNT_ROLES });
-    const cuenta = await prisma.cuentaCorriente.findFirst({
-      where: { clienteId, cliente: { tenantId: context.tenantId } },
-    });
-    if (!cuenta) return { success: false, error: "El socio no tiene cuenta corriente" };
+    const { context, memberScope } = await accountContext();
+    const cuenta = await prisma.cuentaCorriente.findFirst({ where: { clienteId, cliente: memberScope } });
+    if (!cuenta) return { success: false, error: "El socio no tiene una cuenta accesible desde la sede activa" };
 
     const saldoActual = Number(cuenta.saldo);
     if (saldoActual <= 0) return { success: false, error: "La cuenta no tiene deuda pendiente" };
@@ -78,17 +98,15 @@ export async function registrarPagoCuenta(clienteId: number, monto: number, conc
 export async function registrarCargoCuenta(clienteId: number, monto: number, concepto: string) {
   try {
     if (!validAmount(monto)) return { success: false, error: "Ingresá un monto válido" };
-    const context = await requireStaffContext({ roles: ACCOUNT_ROLES });
+    const { context, memberScope } = await accountContext();
     const member = await prisma.cliente.findFirst({
-      where: { id: clienteId, tenantId: context.tenantId, estado: "activo" },
+      where: { ...memberScope, id: clienteId, estado: "activo" },
       select: { id: true },
     });
-    if (!member) return { success: false, error: "Socio no encontrado o inactivo" };
+    if (!member) return { success: false, error: "Socio no encontrado o fuera de la sede activa" };
 
     let cuenta = await prisma.cuentaCorriente.findUnique({ where: { clienteId: member.id } });
-    if (!cuenta) {
-      cuenta = await prisma.cuentaCorriente.create({ data: { clienteId, saldo: 0, limiteCredito: 0 } });
-    }
+    if (!cuenta) cuenta = await prisma.cuentaCorriente.create({ data: { clienteId, saldo: 0, limiteCredito: 0 } });
 
     const saldoActual = Number(cuenta.saldo);
     const limite = Number(cuenta.limiteCredito);
@@ -119,10 +137,8 @@ export async function registrarCargoCuenta(clienteId: number, monto: number, con
 
 export async function getMovimientosCuenta(clienteId: number) {
   try {
-    const context = await requireStaffContext({ roles: ACCOUNT_ROLES });
-    const cuenta = await prisma.cuentaCorriente.findFirst({
-      where: { clienteId, cliente: { tenantId: context.tenantId } },
-    });
+    const { memberScope } = await accountContext();
+    const cuenta = await prisma.cuentaCorriente.findFirst({ where: { clienteId, cliente: memberScope } });
     if (!cuenta) return { success: true, data: [] };
 
     const movimientos = await prisma.cuentaMovimiento.findMany({
@@ -159,9 +175,7 @@ export async function setLimiteCredito(clienteId: number, limite: number) {
       await prisma.cuentaCorriente.create({ data: { clienteId, saldo: 0, limiteCredito: limite } });
     } else {
       const saldoActual = Number(cuenta.saldo);
-      if (limite < saldoActual) {
-        return { success: false, error: `El límite no puede quedar por debajo de la deuda actual de $${saldoActual.toFixed(2)}` };
-      }
+      if (limite < saldoActual) return { success: false, error: `El límite no puede quedar por debajo de la deuda actual de $${saldoActual.toFixed(2)}` };
       await prisma.cuentaCorriente.update({ where: { id: cuenta.id }, data: { limiteCredito: limite } });
     }
 
