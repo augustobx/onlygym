@@ -94,18 +94,21 @@ async function main() {
 
   // 2. Verificar / Crear SuperAdmin de Plataforma
   const superadminEmail = (process.env.SUPERADMIN_EMAIL || "superadmin@nanolabs.ar").toLowerCase().trim();
-  const superadminPassword = process.env.SUPERADMIN_PASSWORD || "NanoLabs#SuperAdmin2026";
+  const superadminPassword = process.env.SUPERADMIN_PASSWORD;
+
+  if (!superadminPassword) {
+    throw new Error("SUPERADMIN_PASSWORD es requerida en producción");
+  }
 
   const existingSuperAdmin = await prisma.superAdmin.findUnique({ where: { email: superadminEmail } });
   if (!existingSuperAdmin) {
-    const passwordHash = await bcrypt.hash(superadminPassword, 10);
+    const password = await bcrypt.hash(superadminPassword, 10);
     await prisma.superAdmin.create({
       data: {
         email: superadminEmail,
         nombre: "NanoLabs SuperAdmin",
-        passwordHash,
+        password,
         rol: "SUPERADMIN",
-        activo: true,
       },
     });
     console.log(`  ✓ SuperAdmin inicial creado: ${superadminEmail}`);
