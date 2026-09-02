@@ -30,11 +30,13 @@ type Props = {
   modules: Record<string, boolean>;
 };
 
+const trainingRoles = ["OWNER", "ADMIN", "ENTRENADOR"];
+
 const trainingItems: Item[] = [
-  { href: "/dashboard/entrenamiento", label: "Rutinas y planes", icon: Dumbbell, module: "entrenamiento" },
+  { href: "/dashboard/entrenamiento", label: "Rutinas y planes", icon: Dumbbell, module: "entrenamiento", roles: trainingRoles },
   { href: "/dashboard/clases", label: "Agenda de clases", icon: CalendarDays, module: "clases" },
   { href: "/dashboard/entrenadores", label: "Entrenadores", icon: UserCheck, roles: ["OWNER", "ADMIN"] },
-  { href: "/dashboard/mediciones", label: "Progreso de socios", icon: ClipboardList, module: "mediciones" },
+  { href: "/dashboard/mediciones", label: "Progreso de socios", icon: ClipboardList, module: "mediciones", roles: trainingRoles },
 ];
 
 const operationItems: Item[] = [
