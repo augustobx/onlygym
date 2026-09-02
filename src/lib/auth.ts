@@ -8,7 +8,11 @@ import { sendPasswordResetEmail } from "@/lib/email";
 import { writeAudit } from "@/lib/audit";
 
 function getAuthSecret() {
-    return process.env.BETTER_AUTH_SECRET || "onlygym-local-development-secret-change-me";
+    if (process.env.BETTER_AUTH_SECRET) return process.env.BETTER_AUTH_SECRET;
+    if (process.env.NODE_ENV === "production") {
+        throw new Error("BETTER_AUTH_SECRET debe estar configurado en producción");
+    }
+    return "onlygym-local-development-secret-change-me";
 }
 
 const configuredOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
