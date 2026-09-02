@@ -33,11 +33,12 @@ export interface ProcesarVentaInput {
 async function requirePosContext(requestedBranchId?: number) {
   const context = await requireStaffContext({ roles: POS_ROLES });
   await requireTenantModule(context.tenantId, "caja");
-  if (!context.branchId) throw new Error("Seleccioná una sucursal antes de operar la caja");
-  if (requestedBranchId && requestedBranchId !== context.branchId) {
+  const branchId = context.branchId;
+  if (!branchId) throw new Error("Seleccioná una sucursal antes de operar la caja");
+  if (requestedBranchId && requestedBranchId !== branchId) {
     throw new Error("La sucursal solicitada no coincide con la sede activa");
   }
-  return context;
+  return { ...context, branchId };
 }
 
 function expectedPosError(error: unknown, fallback: string) {
@@ -192,7 +193,7 @@ export async function procesarVentaPOS(data: ProcesarVentaInput) {
       const venta = await tx.venta.create({
         data: {
           tenantId: context.tenantId,
-          sucursalId: context.branchId!,
+          sucursalId: context.branchId,
           clienteId: memberId,
           tipoPago,
           estadoPago: tipoPago === "cuenta_corriente" ? "pendiente" : "pagado",
@@ -285,7 +286,7 @@ export async function getHistorialVentasPOS(params: {
   try {
     const { desde, hasta, sucursalId, tipoPago } = params;
     const context = await requirePosContext(sucursalId);
-    const where: Prisma.VentaWhereInput = { tenantId: context.tenantId, sucursalId: context.branchId! };
+    const where: Prisma.VentaWhereInput = { tenantId: context.tenantId, sucursalId: context.branchId };
 
     if (desde || hasta) {
       where.fechaVenta = {};
@@ -367,7 +368,7 @@ export async function getDetalleVentaPOS(ventaId: number) {
   try {
     const context = await requirePosContext();
     const venta = await prisma.venta.findFirst({
-      where: { id: ventaId, tenantId: context.tenantId, sucursalId: context.branchId! },
+      where: { id: ventaId, tenantId: context.tenantId, sucursalId: context.branchId },
       include: { cliente: true, user: true, sucursal: true, items: { include: { producto: true } } },
     });
     if (!venta) return { success: false, error: "Venta no encontrada en la sede activa" };
