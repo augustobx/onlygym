@@ -63,7 +63,7 @@ export async function requireStaffContext(options: StaffContextOptions = {}): Pr
     where: {
       userId: session.user.id,
       estado: "activo",
-      tenant: { estado: "activo" },
+      tenant: { estado: { in: ["activo", "prueba"] } },
     },
     include: { tenant: true },
     orderBy: { id: "asc" },
@@ -72,7 +72,7 @@ export async function requireStaffContext(options: StaffContextOptions = {}): Pr
   const cookieStore = await cookies();
   const cookieTenantId = Number(cookieStore.get(ACTIVE_TENANT_COOKIE)?.value || 0);
   const membership = selectActiveMembership(memberships, cookieTenantId || null);
-  if (!membership) throw new AuthorizationError("Sin acceso a un gimnasio activo");
+  if (!membership) throw new AuthorizationError("Sin acceso a un gimnasio activo o en prueba");
   if (options.roles && !options.roles.includes(membership.rol)) {
     throw new AuthorizationError("Tu rol no permite realizar esta operación");
   }
@@ -111,7 +111,7 @@ export async function setActiveTenantCookie(tenantId: number) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new AuthorizationError("Sesión requerida");
   const membership = await prisma.tenantUsuario.findFirst({
-    where: { tenantId, userId: session.user.id, estado: "activo", tenant: { estado: "activo" } },
+    where: { tenantId, userId: session.user.id, estado: "activo", tenant: { estado: { in: ["activo", "prueba"] } } },
     include: { tenant: { select: { id: true, slug: true, nombre: true } } },
   });
   if (!membership) {
