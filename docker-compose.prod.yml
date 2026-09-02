@@ -58,8 +58,6 @@ services:
     build: .
     container_name: onlygym-web
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${APP_PORT:-3005}:3000"
     environment: *app_environment
     volumes:
       - onlygym_progress_photos:/app/data/progress-photos
