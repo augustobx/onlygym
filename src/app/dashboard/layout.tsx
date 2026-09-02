@@ -94,13 +94,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const moduleEnabled = (key: string) => modules[key] !== false;
   const canOperate = operationsRoles.includes(userRole);
   const canManage = ["OWNER", "ADMIN"].includes(userRole);
-  const hasTraining = moduleEnabled("entrenamiento") || moduleEnabled("clases") || moduleEnabled("mediciones");
+  const receptionMode = userRole === "RECEPCION";
+  const hasTraining = receptionMode
+    ? moduleEnabled("clases")
+    : moduleEnabled("entrenamiento") || moduleEnabled("clases") || moduleEnabled("mediciones");
+  const trainingHome = receptionMode ? "/dashboard/clases" : "/dashboard/entrenamiento";
+  const trainingDescription = receptionMode ? "Agenda, reservas y asistencia" : "Rutinas, clases, entrenadores y progreso";
 
   const primaryItems: PrimaryItem[] = [
     { key: "inicio", href: "/dashboard", label: "Resumen", description: "Lo importante de la sede hoy", icon: LayoutDashboard },
     ...(userRole === "ENTRENADOR" ? [{ key: "entrenador" as const, href: "/dashboard/entrenador", label: "Mi trabajo", description: "Socios y tareas asignadas", icon: UserCheck }] : []),
     ...(canOperate && moduleEnabled("socios") ? [{ key: "socios" as const, href: "/dashboard/clientes", label: "Socios", description: "Altas, membresías, cobros y cuentas", icon: Users }] : []),
-    ...(hasTraining ? [{ key: "entrenamiento" as const, href: "/dashboard/entrenamiento", label: "Entrenamiento", description: "Rutinas, clases, entrenadores y progreso", icon: Dumbbell }] : []),
+    ...(hasTraining ? [{ key: "entrenamiento" as const, href: trainingHome, label: "Entrenamiento", description: trainingDescription, icon: Dumbbell }] : []),
     ...(canOperate && moduleEnabled("caja") ? [{ key: "operacion" as const, href: "/dashboard/caja", label: "Operación", description: "Ventas, stock, aforo y caja", icon: ShoppingCart }] : []),
     ...(canManage ? [{ key: "gestion" as const, href: "/dashboard/reportes", label: "Gestión", description: "Reportes, personal y configuración", icon: Building2 }] : []),
   ];
