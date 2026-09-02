@@ -31,24 +31,24 @@ type Props = {
 };
 
 const trainingItems: Item[] = [
-  { href: "/dashboard/entrenamiento", label: "Planificación", icon: Dumbbell, module: "entrenamiento" },
-  { href: "/dashboard/clases", label: "Clases y reservas", icon: CalendarDays, module: "clases" },
+  { href: "/dashboard/entrenamiento", label: "Rutinas y planes", icon: Dumbbell, module: "entrenamiento" },
+  { href: "/dashboard/clases", label: "Agenda de clases", icon: CalendarDays, module: "clases" },
   { href: "/dashboard/entrenadores", label: "Entrenadores", icon: UserCheck, roles: ["OWNER", "ADMIN"] },
-  { href: "/dashboard/mediciones", label: "Progreso", icon: ClipboardList, module: "mediciones" },
+  { href: "/dashboard/mediciones", label: "Progreso de socios", icon: ClipboardList, module: "mediciones" },
 ];
 
 const operationItems: Item[] = [
-  { href: "/dashboard/caja", label: "Ventas", icon: ShoppingCart, module: "caja" },
+  { href: "/dashboard/caja", label: "Nueva venta", icon: ShoppingCart, module: "caja" },
   { href: "/dashboard/caja/movimientos", label: "Arqueo y movimientos", icon: History, module: "caja" },
   { href: "/dashboard/productos", label: "Productos y stock", icon: PackageSearch, module: "caja" },
-  { href: "/dashboard/aforo", label: "Aforo y salidas", icon: Activity, module: "accesos" },
+  { href: "/dashboard/aforo", label: "Aforo e ingresos", icon: Activity, module: "accesos" },
 ];
 
 const managementItems: Item[] = [
   { href: "/dashboard/reportes", label: "Reportes", icon: BarChart3, roles: ["OWNER", "ADMIN"], module: "reportes" },
-  { href: "/dashboard/empleados", label: "Personal", icon: UserCheck, roles: ["OWNER", "ADMIN"] },
-  { href: "/dashboard/configuracion", label: "Configuración", icon: Settings, roles: ["OWNER", "ADMIN"] },
-  { href: "/dashboard/seguridad", label: "Seguridad", icon: ShieldCheck, roles: ["OWNER", "ADMIN"] },
+  { href: "/dashboard/empleados", label: "Personal y accesos", icon: UserCheck, roles: ["OWNER", "ADMIN"] },
+  { href: "/dashboard/configuracion", label: "Sedes y configuración", icon: Settings, roles: ["OWNER", "ADMIN"] },
+  { href: "/dashboard/seguridad", label: "Seguridad y auditoría", icon: ShieldCheck, roles: ["OWNER", "ADMIN"] },
 ];
 
 function groupFor(pathname: string) {
