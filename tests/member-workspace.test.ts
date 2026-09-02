@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memberWorkspaceHref, parseMemberWorkspaceId } from "@/lib/member-workspace";
+import { memberWorkspaceHref, parseMemberWorkspaceId } from "../src/lib/member-workspace";
 
 describe("member workspace", () => {
   it("acepta ids positivos enteros", () => {
