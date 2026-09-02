@@ -17,12 +17,14 @@ export function selectActiveMembership(
   memberships: MembershipCandidate[],
   requestedTenantId: number | null,
 ) {
-  const active = memberships.filter((membership) => membership.tenant.estado === "activo");
-  if (!active.length) return null;
+  const enabled = memberships.filter((membership) =>
+    membership.tenant.estado === "activo" || membership.tenant.estado === "prueba",
+  );
+  if (!enabled.length) return null;
   if (requestedTenantId) {
-    return active.find((membership) => membership.tenantId === requestedTenantId) ?? null;
+    return enabled.find((membership) => membership.tenantId === requestedTenantId) ?? null;
   }
-  if (active.length === 1) return active[0];
+  if (enabled.length === 1) return enabled[0];
   throw new TenantSelectionRequiredError();
 }
 
