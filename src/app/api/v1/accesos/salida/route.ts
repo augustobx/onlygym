@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-auth";
+import { getTenantSlugFromRequest } from "@/lib/request-tenant";
 
 /**
  * POST /api/v1/accesos/salida
- * Endpoint para registrar la salida física del socio desde el torniquete de egreso
- * 
- * Body JSON:
- * {
- *   "documento": "38450123",
- *   "sucursalId": 1
- * }
+ * Registra la salida física únicamente dentro del tenant del hostname actual.
  */
 export async function POST(req: Request) {
   const auth = validateApiKey(req);
   if (!auth.valid) return auth.errorResponse!;
+
+  const tenantSlug = getTenantSlugFromRequest(req);
+  if (!tenantSlug) return NextResponse.json({ registrado: false, error: "Tenant inválido" }, { status: 404 });
 
   try {
     let body: any = {};
@@ -22,24 +20,24 @@ export async function POST(req: Request) {
       const text = await req.text();
       body = text ? JSON.parse(text) : {};
     } catch {
-      return NextResponse.json(
-        { error: "Formato JSON inválido en el cuerpo de la petición", status: 400 },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Formato JSON inválido en el cuerpo de la petición", status: 400 }, { status: 400 });
     }
 
     const documento = body.documento ? String(body.documento).trim() : "";
     const sucursalId = body.sucursalId ? Number(body.sucursalId) : 1;
 
-    if (!documento) {
-      return NextResponse.json(
-        { registrado: false, error: "Parámetro 'documento' requerido" },
-        { status: 400 }
-      );
-    }
+    if (!documento) return NextResponse.json({ registrado: false, error: "Parámetro 'documento' requerido" }, { status: 400 });
+    if (!Number.isInteger(sucursalId) || sucursalId < 1) return NextResponse.json({ registrado: false, error: "sucursalId inválido" }, { status: 400 });
 
-    const branch = await prisma.sucursal.findFirst({ where: { id: sucursalId, estado: "activo", tenant: { estado: "activo" } }, select: { id: true, tenantId: true } });
-    if (!branch) return NextResponse.json({ registrado: false, error: "Sucursal inválida" }, { status: 404 });
+    const branch = await prisma.sucursal.findFirst({
+      where: {
+        id: sucursalId,
+        estado: "activo",
+        tenant: { slug: tenantSlug, estado: { in: ["activo", "prueba"] } },
+      },
+      select: { id: true, tenantId: true },
+    });
+    if (!branch) return NextResponse.json({ registrado: false, error: "Sucursal inválida para este tenant" }, { status: 404 });
 
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -57,21 +55,15 @@ export async function POST(req: Request) {
     });
 
     if (!ingresoAbierto) {
-      return NextResponse.json({
-        registrado: false,
-        error: "No se encontró un ingreso activo para este DNI en el día de hoy",
-      });
+      return NextResponse.json({ registrado: false, error: "No se encontró un ingreso activo para este DNI en el día de hoy" });
     }
 
     const ahora = new Date();
     const duracionMinutos = Math.max(1, Math.floor((ahora.getTime() - ingresoAbierto.fechaHora.getTime()) / 60000));
 
-    await prisma.ingreso.update({
-      where: { id: ingresoAbierto.id },
-      data: {
-        horaSalida: ahora,
-        duracionMinutos,
-      },
+    await prisma.ingreso.updateMany({
+      where: { id: ingresoAbierto.id, tenantId: branch.tenantId, sucursalId: branch.id },
+      data: { horaSalida: ahora, duracionMinutos },
     });
 
     return NextResponse.json({
