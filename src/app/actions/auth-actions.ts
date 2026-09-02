@@ -9,7 +9,7 @@ export async function getMisGimnasios() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return { success: false, error: "No autenticado" };
   const memberships = await prisma.tenantUsuario.findMany({
-    where: { userId: session.user.id, estado: "activo", tenant: { estado: "activo" } },
+    where: { userId: session.user.id, estado: "activo", tenant: { estado: { in: ["activo", "prueba"] } } },
     include: { tenant: { select: { id: true, nombre: true, slug: true, plan: true } } },
     orderBy: { tenant: { nombre: "asc" } },
   });
