@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getRequestTenantSlug } from "@/lib/request-tenant";
+import { getRequestTenantLifecycle } from "@/lib/tenant-lifecycle";
 
 export async function POST(request: NextRequest) {
-  const tenantSlug = await getRequestTenantSlug();
-  if (!tenantSlug) return NextResponse.json({ message: "Dominio de gimnasio inválido" }, { status: 400 });
+  const lifecycle = await getRequestTenantLifecycle();
+  if (lifecycle.status === "invalid" || !lifecycle.tenant) {
+    return NextResponse.json({ message: "Dominio de gimnasio inválido" }, { status: 400 });
+  }
+  if (lifecycle.status === "suspended") {
+    return NextResponse.json({ code: "TENANT_SUSPENDED", message: "Servicio suspendido" }, { status: 423 });
+  }
+  if (lifecycle.status !== "operational") {
+    return NextResponse.json({ code: "TENANT_UNAVAILABLE", message: "Gimnasio no disponible" }, { status: 404 });
+  }
 
   let body: { identifier?: string; email?: string; username?: string; password?: string };
   try {
@@ -21,14 +29,11 @@ export async function POST(request: NextRequest) {
   const isEmail = identifier.includes("@");
   const membership = await prisma.tenantUsuario.findFirst({
     where: {
+      tenantId: lifecycle.tenant.id,
       estado: "activo",
       user: {
         ...(isEmail ? { email: identifier } : { username: identifier }),
         estado: "activo",
-      },
-      tenant: {
-        slug: tenantSlug,
-        estado: { in: ["activo", "prueba"] },
       },
     },
     select: { userId: true },
