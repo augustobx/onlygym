@@ -5,18 +5,15 @@ import {
   Building2,
   ChevronRight,
   ExternalLink,
-  Calendar,
-  Layers,
   CreditCard,
   Users,
   Activity,
   CheckCircle2,
-  Ban,
-  Clock,
   Shield,
   ArrowLeft,
 } from "lucide-react";
 import TenantDetailActions from "./TenantDetailActions";
+import TenantAdminCredentials from "./TenantAdminCredentials";
 import { TenantStatusBadge } from "../../page";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +36,6 @@ export default async function SuperAdminTenantDetailPage({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Breadcrumb & Header */}
       <div>
         <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
           <Link href="/superadmin" className="hover:text-white transition">
@@ -85,7 +81,6 @@ export default async function SuperAdminTenantDetailPage({
         </div>
       </div>
 
-      {/* Operative Metrics Cards */}
       <section className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
         <MetricCard label="Socios Totales" value={tenant._count?.clientes || 0} icon={Users} />
         <MetricCard label="Sedes / Sucursales" value={tenant._count?.sucursales || 0} icon={Building2} />
@@ -95,14 +90,12 @@ export default async function SuperAdminTenantDetailPage({
         <MetricCard label="Check-ins Totales" value={tenant._count?.ingresos || 0} icon={CheckCircle2} />
       </section>
 
-      {/* Main Grid: Management Form and Subscriptions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Actions & Settings Panel (2 cols) */}
         <div className="lg:col-span-2 space-y-6">
           <TenantDetailActions tenant={tenant} planes={planes} />
+          <TenantAdminCredentials tenantId={tenant.id} usuarios={tenant.usuarios || []} />
         </div>
 
-        {/* Subscription & Platform Payments (1 col) */}
         <div className="space-y-6">
           <div className="p-5 rounded-3xl bg-[#121824] border border-white/8 space-y-4">
             <h2 className="text-base font-black text-white flex items-center gap-2">
