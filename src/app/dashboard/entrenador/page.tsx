@@ -5,27 +5,120 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, ChevronRight, Dumbbell, Ruler, Search, TriangleAlert, Users } from "lucide-react";
 import { getDashboardEntrenador } from "@/app/actions/gestion-fitness";
+import { memberWorkspaceHref } from "@/lib/member-workspace";
 
-type Member = { id: number; nombre: string; apellido: string; documento: string; mediciones: Array<{ fecha: string }>; ingresos: Array<{ fechaHora: string }>; asignacionesEntrenamiento: Array<{ plan?: { nombre: string } | null; rutina?: { nombre: string } | null }>; sesionesEntrenamiento: Array<{ iniciadaEn: string }> };
-type Data = { trainer: { user: { name: string; image?: string | null }; foto?: string | null; bio?: string | null; especialidades: string[]; sucursales: Array<{ nombre: string }> } | null; members: Member[]; classes: Array<{ id: number; inicio: string; cupoMaximo: number; tipoClase: { nombre: string }; sucursal: { nombre: string }; _count: { reservas: number } }>; inactiveMembers: Array<{ id: number; nombre: string; apellido: string }>; measurementsPending: Array<{ id: number; nombre: string; apellido: string }>; workoutsToday: number };
+type Member = {
+  id: number;
+  nombre: string;
+  apellido: string;
+  documento: string;
+  mediciones: Array<{ fecha: string }>;
+  ingresos: Array<{ fechaHora: string }>;
+  asignacionesEntrenamiento: Array<{ plan?: { nombre: string } | null; rutina?: { nombre: string } | null }>;
+  sesionesEntrenamiento: Array<{ iniciadaEn: string }>;
+};
+type Data = {
+  trainer: { user: { name: string; image?: string | null }; foto?: string | null; bio?: string | null; especialidades: string[]; sucursales: Array<{ nombre: string }> } | null;
+  members: Member[];
+  classes: Array<{ id: number; inicio: string; cupoMaximo: number; tipoClase: { nombre: string }; sucursal: { nombre: string }; _count: { reservas: number } }>;
+  inactiveMembers: Array<{ id: number; nombre: string; apellido: string }>;
+  measurementsPending: Array<{ id: number; nombre: string; apellido: string }>;
+  workoutsToday: number;
+};
 
 export default function TrainerDashboard() {
-  const [data, setData] = useState<Data | null>(null); const [query, setQuery] = useState(""); const [error, setError] = useState<string | null>(null);
-  useEffect(() => { void getDashboardEntrenador().then((result) => result.success ? setData(result.data as unknown as Data) : setError(result.error || "No se pudo cargar")); }, []);
-  const members = useMemo(() => data?.members.filter((member) => `${member.nombre} ${member.apellido} ${member.documento}`.toLowerCase().includes(query.toLowerCase())) || [], [data, query]);
+  const [data, setData] = useState<Data | null>(null);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getDashboardEntrenador().then((result) => result.success ? setData(result.data as unknown as Data) : setError(result.error || "No se pudo cargar"));
+  }, []);
+
+  const members = useMemo(
+    () => data?.members.filter((member) => `${member.nombre} ${member.apellido} ${member.documento}`.toLowerCase().includes(query.toLowerCase())) || [],
+    [data, query],
+  );
+
   if (error) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold text-rose-800">{error}</div>;
   if (!data) return <p className="p-6 text-sm text-slate-500">Cargando panel del entrenador…</p>;
+
   const photo = data.trainer?.foto || data.trainer?.user.image;
-  return <div className="space-y-5"><section className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-5 text-white sm:flex-row sm:items-center"><div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-cyan-600 text-2xl font-black">{photo ? <img src={photo} alt="" className="h-full w-full object-cover"/> : data.trainer?.user.name.charAt(0) || "E"}</div><div className="flex-1"><p className="text-xs font-black uppercase tracking-widest text-cyan-300">Mi panel técnico</p><h1 className="text-2xl font-black">Hola, {data.trainer?.user.name || "Entrenador"}</h1><p className="mt-1 text-sm text-slate-300">{data.trainer?.sucursales.map(({ nombre }) => nombre).join(" · ") || "Todas las sedes"}</p><div className="mt-2 flex flex-wrap gap-1.5">{data.trainer?.especialidades.map((item) => <span key={item} className="rounded-lg bg-white/10 px-2 py-1 text-[11px] font-bold">{item}</span>)}</div></div></section>
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={Users} value={data.members.length} label="Mis socios"/><Stat icon={Dumbbell} value={data.workoutsToday} label="Entrenamientos hoy"/><Stat icon={Ruler} value={data.measurementsPending.length} label="Mediciones pendientes"/><Stat icon={TriangleAlert} value={data.inactiveMembers.length} label="Sin venir +7 días"/></div>
-    <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]"><section className="rounded-2xl border bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black">Mis socios</h2><p className="text-xs text-slate-500">Ficha deportiva, rutina, progreso y asistencia.</p></div><label className="flex items-center gap-2 rounded-xl border px-3"><Search className="h-4 w-4 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="h-10 w-36 outline-none"/></label></div><div className="mt-4 space-y-2">{members.map((member) => { const assignment = member.asignacionesEntrenamiento[0]; return <Link key={member.id} href={`/dashboard/entrenador/socios/${member.id}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 hover:bg-cyan-50"><div className="grid h-10 w-10 place-items-center rounded-xl bg-white font-black text-cyan-700">{member.nombre.charAt(0)}{member.apellido.charAt(0)}</div><div className="min-w-0 flex-1"><p className="truncate font-bold">{member.nombre} {member.apellido}</p><p className="truncate text-xs text-slate-500">{assignment?.plan?.nombre || assignment?.rutina?.nombre || "Sin entrenamiento asignado"}</p></div><div className="hidden text-right text-[11px] text-slate-500 sm:block"><p>{member.ingresos[0] ? `Último ingreso: ${date(member.ingresos[0].fechaHora)}` : "Nunca ingresó"}</p><p>{member.mediciones[0] ? `Medición: ${date(member.mediciones[0].fecha)}` : "Sin mediciones"}</p></div><ChevronRight className="h-4 w-4 text-slate-400"/></Link>; })}{!members.length && <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No hay socios para mostrar.</p>}</div></section>
-      <div className="space-y-5"><section className="rounded-2xl border bg-white p-5"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-cyan-700"/><h2 className="font-black">Próximas clases</h2></div><div className="mt-3 space-y-2">{data.classes.slice(0, 6).map((item) => <div key={item.id} className="rounded-xl bg-slate-50 p-3"><div className="flex justify-between gap-3"><p className="font-bold">{item.tipoClase.nombre}</p><p className="text-xs font-black text-cyan-700">{item._count.reservas}/{item.cupoMaximo}</p></div><p className="text-xs text-slate-500">{dateTime(item.inicio)} · {item.sucursal.nombre}</p></div>)}{!data.classes.length && <p className="text-sm text-slate-500">No tenés clases en los próximos 7 días.</p>}</div></section><section className="rounded-2xl border bg-white p-5"><h2 className="font-black">Acciones rápidas</h2><div className="mt-3 grid gap-2"><Quick href="/dashboard/entrenamiento" icon={Dumbbell} label="Asignar o modificar rutinas"/><Quick href="/dashboard/mediciones" icon={Ruler} label="Registrar mediciones"/><Quick href="/dashboard/clases" icon={CalendarDays} label="Administrar mis clases"/></div></section></div></div>
-    {(data.measurementsPending.length > 0 || data.inactiveMembers.length > 0) && <div className="grid gap-5 lg:grid-cols-2"><AlertList title="Medición pendiente (+30 días)" items={data.measurementsPending}/><AlertList title="Socios inactivos (+7 días)" items={data.inactiveMembers}/></div>}
-  </div>;
+
+  return (
+    <div className="space-y-5">
+      <section className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-5 text-white sm:flex-row sm:items-center">
+        <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-cyan-600 text-2xl font-black">
+          {photo ? <img src={photo} alt="" className="h-full w-full object-cover" /> : data.trainer?.user.name.charAt(0) || "E"}
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-black uppercase tracking-widest text-cyan-300">Mi trabajo</p>
+          <h1 className="text-2xl font-black">Hola, {data.trainer?.user.name || "Entrenador"}</h1>
+          <p className="mt-1 text-sm text-slate-300">{data.trainer?.sucursales.map(({ nombre }) => nombre).join(" · ") || "Todas las sedes"}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">{data.trainer?.especialidades.map((item) => <span key={item} className="rounded-lg bg-white/10 px-2 py-1 text-[11px] font-bold">{item}</span>)}</div>
+        </div>
+      </section>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat icon={Users} value={data.members.length} label="Mis socios" />
+        <Stat icon={Dumbbell} value={data.workoutsToday} label="Entrenamientos hoy" />
+        <Stat icon={Ruler} value={data.measurementsPending.length} label="Revisar mediciones" />
+        <Stat icon={TriangleAlert} value={data.inactiveMembers.length} label="Sin venir +7 días" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.35fr_1fr]">
+        <section className="rounded-2xl border bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-black">Mis socios</h2><p className="text-xs text-slate-500">Entrá a cada ficha para trabajar sobre rutina, progreso y seguimiento.</p></div>
+            <label className="flex items-center gap-2 rounded-xl border px-3"><Search className="h-4 w-4 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar" className="h-10 w-36 outline-none" /></label>
+          </div>
+          <div className="mt-4 space-y-2">
+            {members.map((member) => {
+              const assignment = member.asignacionesEntrenamiento[0];
+              return (
+                <Link key={member.id} href={`/dashboard/entrenador/socios/${member.id}`} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 hover:bg-cyan-50">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-white font-black text-cyan-700">{member.nombre.charAt(0)}{member.apellido.charAt(0)}</div>
+                  <div className="min-w-0 flex-1"><p className="truncate font-bold">{member.nombre} {member.apellido}</p><p className="truncate text-xs text-slate-500">{assignment?.plan?.nombre || assignment?.rutina?.nombre || "Sin entrenamiento asignado"}</p></div>
+                  <div className="hidden text-right text-[11px] text-slate-500 sm:block"><p>{member.ingresos[0] ? `Último ingreso: ${date(member.ingresos[0].fechaHora)}` : "Nunca ingresó"}</p><p>{member.mediciones[0] ? `Medición: ${date(member.mediciones[0].fecha)}` : "Sin mediciones"}</p></div>
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                </Link>
+              );
+            })}
+            {!members.length && <p className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">No hay socios para mostrar.</p>}
+          </div>
+        </section>
+
+        <div className="space-y-5">
+          <section className="rounded-2xl border bg-white p-5">
+            <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-cyan-700" /><h2 className="font-black">Próximas clases</h2></div><Link href="/dashboard/clases" className="text-xs font-bold text-cyan-700">Abrir agenda</Link></div>
+            <div className="mt-3 space-y-2">{data.classes.slice(0, 6).map((item) => <div key={item.id} className="rounded-xl bg-slate-50 p-3"><div className="flex justify-between gap-3"><p className="font-bold">{item.tipoClase.nombre}</p><p className="text-xs font-black text-cyan-700">{item._count.reservas}/{item.cupoMaximo}</p></div><p className="text-xs text-slate-500">{dateTime(item.inicio)} · {item.sucursal.nombre}</p></div>)}{!data.classes.length && <p className="text-sm text-slate-500">No tenés clases en los próximos 7 días.</p>}</div>
+          </section>
+
+          <section className="rounded-2xl border bg-white p-5">
+            <h2 className="font-black">Acciones rápidas</h2>
+            <div className="mt-3 grid gap-2"><Quick href="/dashboard/entrenamiento" icon={Dumbbell} label="Planificar entrenamiento" /><Quick href="/dashboard/mediciones" icon={Ruler} label="Registrar progreso" /><Quick href="/dashboard/clases" icon={CalendarDays} label="Administrar mis clases" /></div>
+          </section>
+        </div>
+      </div>
+
+      {(data.measurementsPending.length > 0 || data.inactiveMembers.length > 0) && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <AlertList title="Revisar medición (+30 días)" items={data.measurementsPending} hrefFor={(id) => memberWorkspaceHref("progress", id)} />
+          <AlertList title="Socios sin venir (+7 días)" items={data.inactiveMembers} hrefFor={(id) => `/dashboard/entrenador/socios/${id}`} />
+        </div>
+      )}
+    </div>
+  );
 }
 
-function Stat({ icon: Icon, value, label }: { icon: typeof Users; value: number; label: string }) { return <div className="rounded-2xl border bg-white p-4"><Icon className="h-5 w-5 text-cyan-600"/><p className="mt-3 text-2xl font-black">{value}</p><p className="text-xs text-slate-500">{label}</p></div>; }
-function Quick({ href, icon: Icon, label }: { href: string; icon: typeof Users; label: string }) { return <Link href={href} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm font-bold hover:bg-cyan-50"><Icon className="h-4 w-4 text-cyan-700"/><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4 text-slate-400"/></Link>; }
-function AlertList({ title, items }: { title: string; items: Array<{ id: number; nombre: string; apellido: string }> }) { return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><h2 className="font-black text-amber-950">{title}</h2><div className="mt-3 flex flex-wrap gap-2">{items.map((item) => <Link key={item.id} href={`/dashboard/entrenador/socios/${item.id}`} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-900">{item.nombre} {item.apellido}</Link>)}</div></section>; }
+function Stat({ icon: Icon, value, label }: { icon: typeof Users; value: number; label: string }) {
+  return <div className="rounded-2xl border bg-white p-4"><Icon className="h-5 w-5 text-cyan-600" /><p className="mt-3 text-2xl font-black">{value}</p><p className="text-xs text-slate-500">{label}</p></div>;
+}
+function Quick({ href, icon: Icon, label }: { href: string; icon: typeof Users; label: string }) {
+  return <Link href={href} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm font-bold hover:bg-cyan-50"><Icon className="h-4 w-4 text-cyan-700" /><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4 text-slate-400" /></Link>;
+}
+function AlertList({ title, items, hrefFor }: { title: string; items: Array<{ id: number; nombre: string; apellido: string }>; hrefFor: (id: number) => string }) {
+  return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><h2 className="font-black text-amber-950">{title}</h2><div className="mt-3 flex flex-wrap gap-2">{items.map((item) => <Link key={item.id} href={hrefFor(item.id)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-900">{item.nombre} {item.apellido}</Link>)}</div></section>;
+}
 function date(value: string) { return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(value)); }
 function dateTime(value: string) { return new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
