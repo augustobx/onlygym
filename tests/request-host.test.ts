@@ -11,7 +11,7 @@ describe("host autoritativo del request", () => {
   });
 
   it("normaliza puerto y punto final", () => {
-    expect(normalizeRequestHost("Toti.NanoApps.Ar:443.")).toBe("toti.nanoapps.ar:443");
+    expect(normalizeRequestHost("Toti.NanoApps.Ar:443.")).toBe("toti.nanoapps.ar");
     expect(normalizeRequestHost("Toti.NanoApps.Ar:443")).toBe("toti.nanoapps.ar");
   });
 
