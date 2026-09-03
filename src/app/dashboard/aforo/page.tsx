@@ -1,311 +1,165 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { 
-  getAforoEnVivo, 
-  registrarSalidaSocio, 
-  registrarSalidaPorDocumento, 
-  marcarSalidaTodos 
-} from "@/app/actions/horarios";
-import { 
-  Users, 
-  Activity, 
-  Clock, 
-  LogOut, 
-  Search, 
-  RefreshCw, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Sparkles, 
-  UserCheck, 
-  Timer, 
-  ArrowRight
-} from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, LogOut, MapPin, RefreshCw, Search, Users } from "lucide-react";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
+import { getAforoEnVivo, marcarSalidaTodos, registrarSalidaPorDocumento, registrarSalidaSocio } from "@/app/actions/horarios";
+
+type OccupancyData = {
+  personasAdentro: number;
+  capacidadMaxima: number;
+  porcentaje: number;
+  nivel: "bajo" | "medio" | "alto" | "alerta";
+  nivelTexto: string;
+  duracionPromedio: number;
+  personasPresentes: Array<{
+    id: number;
+    ingresoId: number;
+    clienteId: number;
+    nombre: string;
+    documento: string;
+    horaEntrada: string;
+    minutosAdentro: number;
+    tiempoFormateado: string;
+  }>;
+  ultimasSalidas: Array<{
+    id: number;
+    nombre: string;
+    documento: string;
+    horaEntrada: string;
+    horaSalida: string | null;
+    duracionMinutos: number;
+  }>;
+};
+
+type Notice = { type: "success" | "error"; text: string } | null;
+
+const emptyOccupancy: OccupancyData = {
+  personasAdentro: 0,
+  capacidadMaxima: 50,
+  porcentaje: 0,
+  nivel: "bajo",
+  nivelTexto: "Sin datos de ocupación",
+  duracionPromedio: 0,
+  personasPresentes: [],
+  ultimasSalidas: [],
+};
+
+function time(value: string) {
+  return new Date(value).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function AforoTiempoRealPage() {
-  const [sucursalId, setSucursalId] = useState<number>(1);
-  const [sucursalNombre, setSucursalNombre] = useState<string>("Sede Principal");
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const [branchName, setBranchName] = useState("Sucursal activa");
+  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [occupancy, setOccupancy] = useState<OccupancyData>(emptyOccupancy);
+  const [search, setSearch] = useState("");
+  const [document, setDocument] = useState("");
+  const [processingExit, setProcessingExit] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
 
-  const [aforo, setAforo] = useState<any>({
-    personasAdentro: 0,
-    capacidadMaxima: 50,
-    porcentaje: 0,
-    nivel: "bajo",
-    nivelTexto: "Ocupación baja, ideal para entrenar",
-    duracionPromedio: 0,
-    personasPresentes: [],
-    ultimasSalidas: [],
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [searchPresentes, setSearchPresentes] = useState("");
-  const [dniSalida, setDniSalida] = useState("");
-  const [loadingSalida, setLoadingSalida] = useState(false);
-  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  useEffect(() => {
-    const sId = localStorage.getItem("activeSucursalId");
-    const sName = localStorage.getItem("activeSucursalName");
-    const id = sId ? parseInt(sId) : 1;
-    setSucursalId(id);
-    if (sName) setSucursalNombre(sName);
-
-    loadAforo(id);
-
-    const interval = setInterval(() => {
-      loadAforo(id, false);
-    }, 10000);
-
-    return () => clearInterval(interval);
+  const loadOccupancy = useCallback(async (activeBranchId: number, showLoading = false) => {
+    if (showLoading) setLoading(true);
+    const result = await getAforoEnVivo(activeBranchId);
+    if (result.success && result.data) setOccupancy(result.data as unknown as OccupancyData);
+    else setNotice({ type: "error", text: result.error || "No se pudo cargar el aforo" });
+    if (showLoading) setLoading(false);
   }, []);
 
-  const loadAforo = async (sId?: number, showLoading = true) => {
-    if (showLoading) setLoading(true);
-    const sid = sId || sucursalId;
-    const res = await getAforoEnVivo(sid);
-    if (res.success && res.data) {
-      setAforo(res.data);
-    }
-    if (showLoading) setLoading(false);
+  useEffect(() => {
+    let interval: number | undefined;
+    void getStaffNavigationContext().then(async (result) => {
+      if (!result.success || !result.data?.branchId) {
+        setReady(true);
+        return;
+      }
+      setBranchId(result.data.branchId);
+      setBranchName(result.data.branchName || "Sucursal activa");
+      setReady(true);
+      await loadOccupancy(result.data.branchId, true);
+      interval = window.setInterval(() => void loadOccupancy(result.data!.branchId!, false), 10000);
+    });
+    return () => { if (interval) window.clearInterval(interval); };
+  }, [loadOccupancy]);
+
+  const filteredPeople = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return occupancy.personasPresentes;
+    return occupancy.personasPresentes.filter((person) => person.nombre.toLowerCase().includes(q) || person.documento.includes(q));
+  }, [occupancy.personasPresentes, search]);
+
+  const exitOne = async (ingresoId: number, name: string) => {
+    const result = await registrarSalidaSocio(ingresoId);
+    setNotice(result.success
+      ? { type: "success", text: `Salida registrada para ${name}. Permanencia: ${result.duracionMinutos} min.` }
+      : { type: "error", text: result.error || "No se pudo registrar la salida" });
+    if (result.success && branchId) await loadOccupancy(branchId);
   };
 
-  const handleSalidaIndividual = async (ingresoId: number, nombre: string) => {
-    const res = await registrarSalidaSocio(ingresoId);
-    if (res.success) {
-      setMsg({
-        type: "success",
-        text: `Salida registrada para ${nombre}. Permanencia: ${res.duracionMinutos} min.`,
-      });
-      loadAforo(sucursalId, false);
-      setTimeout(() => setMsg(null), 3000);
-    } else {
-      setMsg({ type: "error", text: res.error || "Error al marcar salida" });
+  const exitByDocument = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!branchId || !document.trim()) return;
+    setProcessingExit(true);
+    const result = await registrarSalidaPorDocumento(document.trim(), branchId);
+    setNotice(result.success
+      ? { type: "success", text: result.mensaje || "Salida registrada" }
+      : { type: "error", text: result.error || "No se encontró un ingreso activo" });
+    if (result.success) {
+      setDocument("");
+      await loadOccupancy(branchId);
     }
+    setProcessingExit(false);
   };
 
-  const handleSalidaDni = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!dniSalida.trim()) return;
-
-    setLoadingSalida(true);
-    const res = await registrarSalidaPorDocumento(dniSalida.trim(), sucursalId);
-    if (res.success) {
-      setMsg({ type: "success", text: res.mensaje || "Salida procesada con éxito" });
-      setDniSalida("");
-      loadAforo(sucursalId, false);
-      setTimeout(() => setMsg(null), 3000);
-    } else {
-      setMsg({ type: "error", text: res.error || "No se encontró el ingreso" });
-    }
-    setLoadingSalida(false);
+  const exitAll = async () => {
+    if (!branchId || !window.confirm(`¿Marcar la salida de las ${occupancy.personasAdentro} personas presentes en ${branchName}?`)) return;
+    const result = await marcarSalidaTodos(branchId);
+    setNotice(result.success
+      ? { type: "success", text: `Se cerraron ${result.count} ingresos activos.` }
+      : { type: "error", text: result.error || "No se pudieron cerrar los ingresos" });
+    if (result.success) await loadOccupancy(branchId);
   };
 
-  const handleSalidaTodos = async () => {
-    if (!confirm("¿Deseas marcar la salida de todos los socios activos en este momento?")) return;
-    const res = await marcarSalidaTodos(sucursalId);
-    if (res.success) {
-      setMsg({ type: "success", text: `Salida registrada para ${res.count} personas.` });
-      loadAforo(sucursalId, false);
-      setTimeout(() => setMsg(null), 3000);
-    } else {
-      setMsg({ type: "error", text: res.error || "Error" });
-    }
-  };
+  if (!ready) return <div className="py-20 text-center text-sm font-semibold text-slate-500">Preparando aforo…</div>;
 
-  const personasFiltradas = aforo.personasPresentes.filter((p: any) => {
-    if (!searchPresentes) return true;
-    const q = searchPresentes.toLowerCase();
-    return p.nombre.toLowerCase().includes(q) || p.documento.includes(q);
-  });
+  if (!branchId) {
+    return <div className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center"><MapPin className="mx-auto h-7 w-7 text-amber-700" /><h1 className="mt-2 text-lg font-black text-amber-950">Seleccioná una sucursal</h1><p className="mt-1 text-sm text-amber-800">El aforo es una operación de sede y necesita un contexto activo validado por el servidor.</p><Link href="/seleccionar-sucursal" className="mt-4 inline-flex rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white">Seleccionar sucursal</Link></div>;
+  }
 
   return (
-    <div className="space-y-5 font-sans max-w-7xl mx-auto">
-      
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Activity className="h-5 w-5 text-cyan-600" />
-            Aforo & Ocupación en Tiempo Real
-          </h2>
-          <p className="text-xs text-slate-600 font-medium mt-0.5">
-            Sede: <strong className="text-slate-900">{sucursalNombre}</strong> — Monitoreo en vivo de permanencia en sala.
-          </p>
-        </div>
+    <div className="mx-auto max-w-7xl space-y-5 font-sans">
+      <header className="flex flex-col gap-4 rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+        <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700">Operación · {branchName}</p><h1 className="mt-1 flex items-center gap-2 text-xl font-black text-slate-950"><Activity className="h-5 w-5 text-cyan-600" />Aforo en tiempo real</h1><p className="mt-1 text-xs font-medium text-slate-600">Ingresos abiertos, permanencia y salidas de la sede activa.</p></div>
+        <div className="flex gap-2"><button onClick={() => void loadOccupancy(branchId, true)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-800"><RefreshCw className={`h-4 w-4 text-cyan-600 ${loading ? "animate-spin" : ""}`} />Actualizar</button>{occupancy.personasAdentro > 0 && <button onClick={() => void exitAll()} className="inline-flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-800"><LogOut className="h-4 w-4" />Salida masiva</button>}</div>
+      </header>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => loadAforo(sucursalId, true)}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-50 shadow-2xs transition"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 text-cyan-600 ${loading ? "animate-spin" : ""}`} />
-            <span>Actualizar</span>
-          </button>
+      {notice && <button onClick={() => setNotice(null)} className={`flex w-full items-center gap-2 rounded-xl border p-3 text-left text-xs font-bold ${notice.type === "success" ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-rose-300 bg-rose-50 text-rose-900"}`}>{notice.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}{notice.text}</button>}
 
-          {aforo.personasAdentro > 0 && (
-            <button
-              onClick={handleSalidaTodos}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold transition"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span>Salida Masiva</span>
-            </button>
-          )}
-        </div>
-      </div>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Personas adentro" value={`${occupancy.personasAdentro} / ${occupancy.capacidadMaxima}`} detail={occupancy.nivelTexto} />
+        <Metric label="Ocupación" value={`${occupancy.porcentaje}%`} detail="Actualizado cada 10 segundos" />
+        <Metric label="Permanencia promedio" value={`${occupancy.duracionPromedio} min`} detail="Sobre salidas registradas hoy" />
+      </section>
 
-      {msg && (
-        <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border ${
-          msg.type === "success" 
-            ? "bg-emerald-50 text-emerald-900 border-emerald-300" 
-            : "bg-rose-50 text-rose-900 border-rose-300"
-        }`}>
-          {msg.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4 text-rose-700" />}
-          <span>{msg.text}</span>
-        </div>
-      )}
+      <div className="grid items-start gap-5 lg:grid-cols-12">
+        <section className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-2xs lg:col-span-8">
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="flex items-center gap-2 text-sm font-black text-slate-950"><Users className="h-4 w-4 text-cyan-600" />Socios presentes</h2><p className="text-[11px] font-medium text-slate-500">{occupancy.personasPresentes.length} ingresos abiertos en {branchName}</p></div><label className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nombre o DNI" className="h-9 w-full rounded-xl border border-slate-300 pl-9 pr-3 text-xs font-semibold outline-none focus:border-cyan-500" /></label></div>
+          <div className="max-h-[520px] overflow-auto"><table className="w-full text-left text-xs"><thead className="sticky top-0 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Socio</th><th className="px-4 py-3">Entrada</th><th className="px-4 py-3">Permanencia</th><th className="px-4 py-3 text-right">Acción</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredPeople.map((person) => <tr key={person.ingresoId}><td className="px-4 py-3"><p className="font-black text-slate-950">{person.nombre}</p><p className="font-mono text-[10px] text-slate-500">DNI {person.documento}</p></td><td className="px-4 py-3 font-mono text-slate-600">{time(person.horaEntrada)}</td><td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-700"><Clock3 className="h-3 w-3 text-cyan-600" />{person.tiempoFormateado}</span></td><td className="px-4 py-3 text-right"><button onClick={() => void exitOne(person.ingresoId, person.nombre)} className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-bold text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700">Marcar salida</button></td></tr>)}{!filteredPeople.length && <tr><td colSpan={4} className="px-4 py-12 text-center font-semibold text-slate-500">No hay socios presentes que coincidan con la búsqueda.</td></tr>}</tbody></table></div>
+        </section>
 
-      {/* Monitor Central de Ocupación */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-800">
-              <span className="h-2 w-2 rounded-full bg-cyan-500 animate-pulse"></span>
-              <span>Monitoreo Activo · {aforo.nivelTexto}</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold font-mono text-slate-900 tabular-nums">{aforo.personasAdentro}</span>
-              <span className="text-sm font-semibold text-slate-600">/ {aforo.capacidadMaxima} capacidad máx.</span>
-            </div>
-          </div>
+        <aside className="space-y-4 lg:col-span-4">
+          <form onSubmit={exitByDocument} className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs"><h2 className="font-black text-slate-950">Salida manual por DNI</h2><p className="mt-1 text-xs font-medium text-slate-500">Usalo cuando el socio no haya registrado la salida en el dispositivo.</p><input value={document} onChange={(event) => setDocument(event.target.value)} placeholder="Número de documento" className="mt-4 h-10 w-full rounded-xl border border-slate-300 px-3 font-mono text-sm font-bold outline-none focus:border-cyan-500" /><button disabled={processingExit || !document.trim()} className="mt-2 h-10 w-full rounded-xl bg-slate-950 text-xs font-black text-white disabled:opacity-40">{processingExit ? "Procesando…" : "Registrar salida"}</button></form>
 
-          <div className="text-left sm:text-right space-y-0.5">
-            <span className="text-xs text-slate-500 font-bold uppercase">Permanencia Promedio</span>
-            <p className="text-lg font-bold font-mono text-slate-900 tabular-nums">{aforo.duracionPromedio} min</p>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-            <div
-              style={{ width: `${Math.min(100, aforo.porcentaje)}%` }}
-              className={`h-full rounded-full transition-all ${
-                aforo.porcentaje >= 85 ? "bg-rose-500" : aforo.porcentaje >= 60 ? "bg-amber-500" : "bg-gradient-to-r from-cyan-500 to-blue-600"
-              }`}
-            />
-          </div>
-          <div className="flex justify-between text-[11px] text-slate-600 font-mono font-semibold">
-            <span>0 personas</span>
-            <span>{aforo.porcentaje}% de ocupación</span>
-            <span>{aforo.capacidadMaxima} personas máx.</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid: Personas adentro + Marcar Salida */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        
-        {/* Personas Presentes (8 cols) */}
-        <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Users className="h-4 w-4 text-cyan-600" />
-              <span>Socios en Sala ({aforo.personasPresentes.length})</span>
-            </h3>
-
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={searchPresentes}
-                onChange={e => setSearchPresentes(e.target.value)}
-                placeholder="Buscar socio presente..."
-                className="w-full pl-8 pr-3 py-1 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-medium focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200 sticky top-0">
-                <tr>
-                  <th className="px-4 py-2.5">Socio</th>
-                  <th className="px-4 py-2.5">Hora Entrada</th>
-                  <th className="px-4 py-2.5">Tiempo en Sala</th>
-                  <th className="px-4 py-2.5 text-right">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {personasFiltradas.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500 font-medium">
-                      No hay socios presentes en este momento.
-                    </td>
-                  </tr>
-                ) : (
-                  personasFiltradas.map((p: any) => (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition">
-                      <td className="px-4 py-2.5 font-bold text-slate-900">
-                        {p.nombre}
-                        <span className="text-[10px] text-slate-600 font-mono block font-semibold">DNI: {p.documento}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600 font-mono text-[11px]">{p.horaEntrada}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-mono text-[10px] font-bold border border-slate-200">
-                          <Clock className="w-3 h-3 text-cyan-600" />
-                          {p.minutosAdentro} min
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          onClick={() => handleSalidaIndividual(p.id, p.nombre)}
-                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 rounded-md text-xs font-semibold transition"
-                        >
-                          Marcar Salida
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Salida Rápida por DNI (4 cols) */}
-        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-          <div>
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <LogOut className="h-4 w-4 text-cyan-600" />
-              Salida Manual por DNI
-            </h3>
-            <p className="text-xs text-slate-600 mt-0.5 font-medium">Si el socio no marcó salida en el molinete.</p>
-          </div>
-
-          <form onSubmit={handleSalidaDni} className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">DNI del Socio</label>
-              <input
-                type="text"
-                required
-                value={dniSalida}
-                onChange={e => setDniSalida(e.target.value)}
-                placeholder="Número de documento..."
-                className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loadingSalida || !dniSalida}
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 transition"
-            >
-              {loadingSalida ? "Procesando..." : "Registrar Salida"}
-            </button>
-          </form>
-        </div>
+          <section className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-2xs"><div className="border-b border-slate-100 p-4"><h2 className="text-sm font-black text-slate-950">Últimas salidas</h2></div><div className="divide-y divide-slate-100">{occupancy.ultimasSalidas.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-xs font-black text-slate-900">{entry.nombre}</p><p className="text-[10px] font-medium text-slate-500">{entry.horaSalida ? time(entry.horaSalida) : "—"}</p></div><span className="shrink-0 font-mono text-[10px] font-black text-slate-600">{entry.duracionMinutos} min</span></div>)}{!occupancy.ultimasSalidas.length && <p className="p-6 text-center text-xs font-medium text-slate-500">Todavía no hay salidas hoy.</p>}</div></section>
+        </aside>
       </div>
     </div>
   );
+}
+
+function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"><p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-2xl font-black text-slate-950">{value}</p><p className="mt-1 text-[11px] font-medium text-slate-500">{detail}</p></article>;
 }
