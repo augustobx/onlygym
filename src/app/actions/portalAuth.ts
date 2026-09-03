@@ -125,10 +125,17 @@ export async function getPortalData() {
     const inicioMes = new Date();
     inicioMes.setDate(1);
     inicioMes.setHours(0, 0, 0, 0);
+
+    const inicioSemana = new Date();
+    inicioSemana.setHours(0, 0, 0, 0);
+    const day = inicioSemana.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    inicioSemana.setDate(inicioSemana.getDate() + mondayOffset);
+
     const cliente = await prisma.cliente.findFirst({
       where: { id: context.clienteId, tenantId: context.tenantId },
       include: {
-        pagos: { include: { membresia: true }, orderBy: { fechaPago: "desc" }, take: 25 },
+        pagos: { include: { membresia: true }, orderBy: { fechaVencimiento: "desc" }, take: 25 },
         ingresos: { where: { tenantId: context.tenantId }, orderBy: { fechaHora: "desc" }, take: 60 },
         cuentaCorriente: { include: { movimientos: { orderBy: { fecha: "desc" }, take: 25 } } },
         sucursales: true,
@@ -159,7 +166,9 @@ export async function getPortalData() {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
     const diaSemana = new Date().getDay();
-    const [aforo, saldoPuntos, historialReservas] = await Promise.all([
+    const accessScope = { tenantId: context.tenantId, clienteId: context.clienteId, estado: "ACTIVO" } as const;
+
+    const [aforo, saldoPuntos, historialReservas, visitasMes, visitasSemana, visitasTotal] = await Promise.all([
       sucursalId
         ? Promise.all([
             prisma.ingreso.count({
@@ -212,8 +221,10 @@ export async function getPortalData() {
         orderBy: { creadaEn: "desc" },
         take: 30,
       }),
+      prisma.ingreso.count({ where: { ...accessScope, fechaHora: { gte: inicioMes } } }),
+      prisma.ingreso.count({ where: { ...accessScope, fechaHora: { gte: inicioSemana } } }),
+      prisma.ingreso.count({ where: accessScope }),
     ]);
-    const visitasMes = cliente.ingresos.filter((ingreso) => ingreso.estado === "ACTIVO" && ingreso.fechaHora >= inicioMes).length;
 
     return { success: true, data: serializeData({
       ...cliente,
@@ -227,6 +238,8 @@ export async function getPortalData() {
       } : null,
       aforo,
       visitasMes,
+      visitasSemana,
+      visitasTotal,
       puntos: saldoPuntos._sum.puntos || 0,
       historialReservas,
       debeCambiarPassword: cliente.usuarioCliente?.debeCambiarPassword ?? false,
@@ -253,7 +266,7 @@ export async function getDetalleTicketVenta(ticketId: number) {
       tipoPago: venta.tipoPago,
       cliente: `${venta.cliente?.nombre || ""} ${venta.cliente?.apellido || ""}`.trim(),
       documento: venta.cliente?.documento || null,
-      sucursal: venta.sucursal?.nombre || "Sede Principal",
+      sucursal: venta.sucursal?.nombre || "Sede",
       vendedor: venta.user?.name || "Recepción",
       items: venta.items.map((item) => ({ id: item.id, nombre: item.producto.nombre, cantidad: item.cantidad, precioUnitario: Number(item.precioUnitario), subtotal: Number(item.subtotal) })),
     }) };
