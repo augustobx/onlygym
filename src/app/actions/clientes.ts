@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import { assertActiveMemberBranch, resolveNewMemberBranches } from "@/lib/member-operations-policy";
+import { isMembershipActive, membershipSnapshot } from "@/lib/membership-state";
 import { prisma } from "@/lib/prisma";
 import { clienteSchema, ClienteData } from "@/lib/schemas";
 import { serializeData } from "@/lib/serialize";
@@ -124,20 +125,8 @@ export async function getClientesPaginados(params: {
     const hoy = new Date();
     let filteredItems = clientesDb.map((cliente) => {
       const ultimoPago = cliente.pagos[0];
-      let estadoMembresia: "AL_DIA" | "VENCIDO" = "VENCIDO";
-      let diasRestantes = 0;
-      let vencimientoDate: Date | null = null;
-      let vencenPronto = false;
-
-      if (ultimoPago) {
-        vencimientoDate = new Date(ultimoPago.fechaVencimiento);
-        vencimientoDate.setHours(23, 59, 59, 999);
-        if (vencimientoDate >= hoy) {
-          estadoMembresia = "AL_DIA";
-          diasRestantes = Math.ceil((vencimientoDate.getTime() - hoy.getTime()) / 86400000);
-          vencenPronto = diasRestantes <= 7;
-        }
-      }
+      const membership = membershipSnapshot(ultimoPago?.fechaVencimiento, hoy);
+      const estadoMembresia: "AL_DIA" | "VENCIDO" = membership.active ? "AL_DIA" : "VENCIDO";
 
       return {
         id: cliente.id,
@@ -151,10 +140,10 @@ export async function getClientesPaginados(params: {
         estado: cliente.estado,
         fechaRegistro: cliente.fechaRegistro,
         estadoMembresia,
-        diasRestantes,
-        vencenPronto,
+        diasRestantes: membership.daysRemaining,
+        vencenPronto: membership.state === "expiring",
         ultimoPlan: ultimoPago?.membresia.nombre || "Sin plan",
-        fechaVencimiento: vencimientoDate?.toISOString() || null,
+        fechaVencimiento: membership.expiration?.toISOString() || null,
         saldoCuenta: cliente.cuentaCorriente ? Number(cliente.cuentaCorriente.saldo) : 0,
         limiteCredito: cliente.cuentaCorriente ? Number(cliente.cuentaCorriente.limiteCredito) : 0,
       };
@@ -316,8 +305,8 @@ export async function getCliente(id: number) {
     const cliente = await prisma.cliente.findFirst({
       where: { id, ...memberScope },
       include: {
-        pagos: { include: { membresia: true }, orderBy: { fechaPago: "desc" }, take: 30 },
-        ingresos: { orderBy: { fechaHora: "desc" }, take: 30 },
+        pagos: { include: { membresia: true }, orderBy: { fechaVencimiento: "desc" }, take: 30 },
+        ingresos: { where: { tenantId: context.tenantId }, orderBy: { fechaHora: "desc" }, take: 30 },
         cuentaCorriente: {
           include: { movimientos: { orderBy: { fecha: "desc" }, take: 30 } },
         },
@@ -358,7 +347,10 @@ export async function resetPasswordCliente(clienteId: number) {
           data: { tenantId: context.tenantId, clienteId, usuario: cliente.documento.trim(), password, debeCambiarPassword: true },
         });
       } else {
-        await tx.usuarioCliente.update({ where: { clienteId }, data: { password, debeCambiarPassword: true } });
+        await tx.usuarioCliente.updateMany({
+          where: { clienteId, tenantId: context.tenantId },
+          data: { password, debeCambiarPassword: true },
+        });
       }
       await tx.sesionSocio.deleteMany({ where: { tenantId: context.tenantId, clienteId } });
     });
@@ -415,7 +407,7 @@ export async function exportarClientesData(sucursalId?: number) {
       success: true,
       data: clientes.map((cliente) => {
         const ultimoPago = cliente.pagos[0];
-        const tienePagoActivo = Boolean(ultimoPago && new Date(ultimoPago.fechaVencimiento) >= hoy);
+        const tienePagoActivo = isMembershipActive(ultimoPago?.fechaVencimiento, hoy);
         return {
           documento: cliente.documento,
           nombre: cliente.nombre,
