@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import PortalQuickAccess from "@/components/PortalQuickAccess";
 
 export const metadata: Metadata = {
   title: "OnlyGym Socio",
-  description: "Tu membresía, entrenamientos, reservas, progreso y beneficios en un solo lugar.",
+  description: "Tu membresía, entrenamientos, reservas, progreso, cuenta y carnet digital en un solo lugar.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -19,5 +20,10 @@ export const viewport: Viewport = {
 };
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <PortalQuickAccess />
+    </>
+  );
 }
