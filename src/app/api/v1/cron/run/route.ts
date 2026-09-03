@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateApiKey } from "@/lib/api-auth";
+import { sendMemberPush } from "@/lib/web-push";
 
 export async function GET(request: NextRequest) {
   return handleCron(request);
@@ -8,6 +9,38 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   return handleCron(request);
+}
+
+async function registerPushDelivery(input: {
+  tenantId: number;
+  clienteId: number;
+  tipo: string;
+  titulo: string;
+  mensaje: string;
+  url: string;
+  tag: string;
+}) {
+  const push = await sendMemberPush({
+    tenantId: input.tenantId,
+    clienteId: input.clienteId,
+    title: input.titulo,
+    body: input.mensaje,
+    url: input.url,
+    tag: input.tag,
+  });
+  await prisma.registroNotificacion.create({
+    data: {
+      tenantId: input.tenantId,
+      clienteId: input.clienteId,
+      canal: "push",
+      tipo: input.tipo,
+      titulo: input.titulo,
+      mensaje: input.mensaje,
+      estado: push.sent > 0 ? "enviado" : push.configured ? "sin_dispositivo" : "no_configurado",
+      error: push.sent > 0 ? null : push.error || (push.subscriptions === 0 ? "El socio no tiene dispositivos suscriptos" : `${push.failed} envío(s) fallaron`),
+    },
+  });
+  return push;
 }
 
 async function handleCron(request: NextRequest) {
@@ -19,6 +52,8 @@ async function handleCron(request: NextRequest) {
     const results = {
       recordatoriosClases: 0,
       vencimientosNotificados: 0,
+      pushEnviados: 0,
+      pushFallidos: 0,
       gimnasiosSuspendidos: 0,
       ejecutadoEn: now.toISOString(),
     };
@@ -56,16 +91,29 @@ async function handleCron(request: NextRequest) {
 
         if (!existing) {
           const horaStr = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(new Date(c.inicio));
-          await prisma.notificacion.create({
+          const titulo = `Recordatorio: Clase de ${c.tipoClase.nombre}`;
+          const mensaje = `Tu clase comienza a las ${horaStr} en ${c.sucursal.nombre}. ¡Te esperamos!`;
+          const notification = await prisma.notificacion.create({
             data: {
               tenantId: c.tenantId,
               clienteId: res.clienteId,
               tipo: "recordatorio_clase",
-              titulo: `Recordatorio: Clase de ${c.tipoClase.nombre}`,
-              mensaje: `Tu clase comienza a las ${horaStr} en ${c.sucursal.nombre}. ¡Te esperamos!`,
-              datos: { claseId: c.id },
+              titulo,
+              mensaje,
+              datos: { claseId: c.id, url: "/portal/dashboard" },
             },
           });
+          const push = await registerPushDelivery({
+            tenantId: c.tenantId,
+            clienteId: res.clienteId,
+            tipo: "recordatorio_clase",
+            titulo,
+            mensaje,
+            url: "/portal/dashboard",
+            tag: `recordatorio_clase:${notification.id}`,
+          });
+          results.pushEnviados += push.sent;
+          results.pushFallidos += push.failed;
           results.recordatoriosClases++;
         }
       }
@@ -100,18 +148,31 @@ async function handleCron(request: NextRequest) {
 
       if (!existingNotif) {
         const fechaStr = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short" }).format(new Date(pago.fechaVencimiento));
-        await prisma.notificacion.create({
+        const titulo = isToday ? "Tu membresía vence hoy" : "Tu membresía está por vencer";
+        const mensaje = isToday
+          ? `Tu plan ${pago.membresia.nombre} vence hoy. Renová en recepción para seguir entrenando.`
+          : `Tu plan ${pago.membresia.nombre} vence el ${fechaStr}. ¡Renová con anticipación!`;
+        const notification = await prisma.notificacion.create({
           data: {
             tenantId: pago.tenantId,
             clienteId: pago.clienteId,
             tipo,
-            titulo: isToday ? "Tu membresía vence hoy" : "Tu membresía está por vencer",
-            mensaje: isToday
-              ? `Tu plan ${pago.membresia.nombre} vence hoy. Renueva en recepción para seguir entrenando.`
-              : `Tu plan ${pago.membresia.nombre} vence el ${fechaStr}. ¡Renueva con anticipación!`,
-            datos: { pagoId: pago.id },
+            titulo,
+            mensaje,
+            datos: { pagoId: pago.id, url: "/portal/cuenta" },
           },
         });
+        const push = await registerPushDelivery({
+          tenantId: pago.tenantId,
+          clienteId: pago.clienteId,
+          tipo,
+          titulo,
+          mensaje,
+          url: "/portal/cuenta",
+          tag: `${tipo}:${notification.id}`,
+        });
+        results.pushEnviados += push.sent;
+        results.pushFallidos += push.failed;
         results.vencimientosNotificados++;
       }
     }
