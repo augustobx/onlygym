@@ -1,70 +1,56 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { registrarIngresoMolinete, getUltimosIngresos } from "@/app/actions/accesos";
-import { 
-  LogOut, 
-  ScanFace, 
-  CheckCircle2, 
-  XCircle, 
-  AlertCircle, 
-  Camera, 
-  CameraOff, 
-  Volume2, 
-  VolumeX, 
-  Clock
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  Clock3,
+  LogOut,
+  RefreshCw,
+  ScanLine,
+  Volume2,
+  VolumeX,
+  XCircle,
+} from "lucide-react";
+import { registrarIngresoMolinete, getUltimosIngresos } from "@/app/actions/accesos";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
+
+type AccessState = "ESPERANDO" | "ACTIVO" | "VENCIDO" | "INACTIVO" | "NO_ENCONTRADO" | "DENEGADO" | "ERROR";
+type AccessResult = {
+  estado: AccessState;
+  mensaje: string;
+  clienteNombre?: string;
+  clienteFoto?: string | null;
+};
+type HistoryItem = {
+  id: number;
+  fechaHora: string;
+  estado: string;
+  motivo?: string | null;
+  cliente: { nombre: string; apellido: string };
+};
 
 function playSound(type: "success" | "denied") {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-
-    if (type === "success") {
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.type = "sine";
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc1.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.12);
-
-      osc2.type = "sine";
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime);
-      osc2.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.12);
-
-      gain.gain.setValueAtTime(0.18, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start();
-      osc2.start();
-      osc1.stop(ctx.currentTime + 0.35);
-      osc2.stop(ctx.currentTime + 0.35);
-    } else {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(220, ctx.currentTime);
-      osc.frequency.setValueAtTime(180, ctx.currentTime + 0.15);
-
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    }
-  } catch (err) {
-    console.error("Audio error:", err);
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type === "success" ? "sine" : "sawtooth";
+    osc.frequency.setValueAtTime(type === "success" ? 620 : 220, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(type === "success" ? 900 : 160, ctx.currentTime + 0.16);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch {
+    // El audio es una ayuda operativa, nunca debe bloquear un ingreso.
   }
 }
 
@@ -72,269 +58,220 @@ export default function MolinetePage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  const [sucursalId, setSucursalId] = useState<number | null>(null);
-  const [sucursalName, setSucursalName] = useState<string>("");
-  const [dni, setDni] = useState("");
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanTimerRef = useRef<number | null>(null);
+
+  const [branchId, setBranchId] = useState<number | null>(null);
+  const [branchName, setBranchName] = useState("Sede activa");
+  const [credential, setCredential] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [result, setResult] = useState<AccessResult>({ estado: "ESPERANDO", mensaje: "Escaneá el carnet QR o ingresá el DNI" });
 
-  const [ultimoResultado, setUltimoResultado] = useState<{
-    estado: "ESPERANDO" | "ACTIVO" | "VENCIDO" | "ERROR" | "DENEGADO";
-    mensaje: string;
-    clienteNombre?: string;
-    clienteFoto?: string | null;
-  }>({
-    estado: "ESPERANDO",
-    mensaje: "Escanea tu DNI o Código QR para ingresar",
-  });
-
-  const [historial, setHistorial] = useState<any[]>([]);
+  const loadHistory = useCallback(async (id: number) => {
+    const response = await getUltimosIngresos(id);
+    if (response.success && response.data) setHistory(response.data as unknown as HistoryItem[]);
+  }, []);
 
   useEffect(() => {
-    const sId = localStorage.getItem("activeSucursalId");
-    const sName = localStorage.getItem("activeSucursalName");
-    if (!sId) {
-      router.push("/seleccionar-sucursal");
+    void (async () => {
+      const context = await getStaffNavigationContext();
+      if (!context.success || !context.data) {
+        router.replace("/login");
+        return;
+      }
+      if (!context.data.branchId || !context.data.branchName) {
+        router.replace("/seleccionar-sucursal");
+        return;
+      }
+      setBranchId(context.data.branchId);
+      setBranchName(context.data.branchName);
+      await loadHistory(context.data.branchId);
+      window.setTimeout(() => inputRef.current?.focus(), 50);
+    })();
+  }, [loadHistory, router]);
+
+  useEffect(() => {
+    if (!branchId) return;
+    const poll = window.setInterval(() => void loadHistory(branchId), 15_000);
+    return () => window.clearInterval(poll);
+  }, [branchId, loadHistory]);
+
+  useEffect(() => () => {
+    if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  const processCredential = useCallback(async (raw: string) => {
+    if (!branchId || loading) return;
+    const clean = raw.trim();
+    if (!clean) return;
+
+    setLoading(true);
+    const response = await registrarIngresoMolinete(clean, branchId);
+    const state = (response.estado || "ERROR") as AccessState;
+    const success = response.success && state === "ACTIVO";
+    setResult({
+      estado: state,
+      mensaje: response.mensaje || response.error || (success ? "Acceso concedido" : "Acceso denegado"),
+      clienteNombre: response.cliente ? `${response.cliente.nombre} ${response.cliente.apellido}` : undefined,
+      clienteFoto: response.cliente?.foto || null,
+    });
+    if (soundEnabled) playSound(success ? "success" : "denied");
+    setCredential("");
+    await loadHistory(branchId);
+    setLoading(false);
+    window.setTimeout(() => inputRef.current?.focus(), 50);
+    window.setTimeout(() => setResult({ estado: "ESPERANDO", mensaje: "Escaneá el carnet QR o ingresá el DNI" }), 5_000);
+  }, [branchId, loadHistory, loading, soundEnabled]);
+
+  async function toggleCamera() {
+    if (cameraActive) {
+      if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setCameraActive(false);
       return;
     }
-    const parsedId = parseInt(sId);
-    setSucursalId(parsedId);
-    setSucursalName(sName || "Sede Principal");
-    cargarHistorial(parsedId);
 
-    const keepFocus = setInterval(() => {
-      if (document.activeElement !== inputRef.current) {
-        inputRef.current?.focus();
-      }
-    }, 1500);
-
-    return () => clearInterval(keepFocus);
-  }, [router]);
-
-  const cargarHistorial = async (id: number) => {
-    const res = await getUltimosIngresos(id);
-    if (res.success && res.data) {
-      setHistorial(res.data);
+    setCameraError(null);
+    const Detector = (window as unknown as { BarcodeDetector?: new (options: { formats: string[] }) => { detect(source: HTMLVideoElement): Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+    if (!Detector) {
+      setCameraError("Este navegador no permite leer QR con cámara. Podés usar un lector USB/Bluetooth o ingresar el DNI.");
+      return;
     }
-  };
 
-  const procesarIngreso = async (documento: string) => {
-    if (!documento.trim() || !sucursalId || loading) return;
-    setLoading(true);
-
-    const res = await registrarIngresoMolinete(documento.trim(), sucursalId);
-
-    if (res.success) {
-      setUltimoResultado({
-        estado: res.estado as any,
-        mensaje: res.mensaje || (res.estado === "ACTIVO" ? "¡Acceso Concedido!" : "Cuota Vencida"),
-        clienteNombre: res.cliente ? `${res.cliente.nombre} ${res.cliente.apellido}` : undefined,
-        clienteFoto: res.cliente?.foto || null,
-      });
-
-      if (soundEnabled) {
-        if (res.estado === "ACTIVO") {
-          playSound("success");
-        } else {
-          playSound("denied");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      streamRef.current = stream;
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setCameraActive(true);
+      const detector = new Detector({ formats: ["qr_code"] });
+      scanTimerRef.current = window.setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2 || loading) return;
+        try {
+          const codes = await detector.detect(videoRef.current);
+          const value = codes[0]?.rawValue?.trim();
+          if (value) {
+            if (scanTimerRef.current) window.clearInterval(scanTimerRef.current);
+            scanTimerRef.current = null;
+            streamRef.current?.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+            setCameraActive(false);
+            await processCredential(value);
+          }
+        } catch {
+          // Se continúa intentando mientras la cámara esté activa.
         }
-      }
-
-      cargarHistorial(sucursalId);
-    } else {
-      setUltimoResultado({
-        estado: (res.estado as any) || "ERROR",
-        mensaje: res.error || "Acceso Denegado",
-        clienteNombre: res.cliente ? `${res.cliente.nombre} ${res.cliente.apellido}` : undefined,
-        clienteFoto: res.cliente?.foto || null,
-      });
-
-      if (soundEnabled) playSound("denied");
+      }, 450);
+    } catch {
+      setCameraError("No se pudo abrir la cámara. Revisá los permisos del navegador.");
     }
+  }
 
-    setLoading(false);
-    setDni("");
-
-    setTimeout(() => {
-      setUltimoResultado({
-        estado: "ESPERANDO",
-        mensaje: "Escanea tu DNI o Código QR para ingresar",
-        clienteFoto: null,
-      });
-    }, 5000);
-  };
-
-  const handleScanForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await procesarIngreso(dni);
-  };
-
-  const bgConfig = {
-    ESPERANDO: "bg-slate-950",
-    ACTIVO: "bg-emerald-950 text-white",
-    VENCIDO: "bg-rose-950 text-white",
-    DENEGADO: "bg-rose-950 text-white",
-    ERROR: "bg-amber-950 text-white",
-  }[ultimoResultado.estado] || "bg-slate-950";
+  const success = result.estado === "ACTIVO";
+  const waiting = result.estado === "ESPERANDO";
+  const surface = waiting
+    ? "bg-slate-950"
+    : success
+      ? "bg-emerald-950"
+      : result.estado === "ERROR"
+        ? "bg-amber-950"
+        : "bg-rose-950";
 
   return (
-    <div className={`min-h-screen flex flex-col lg:flex-row transition-colors duration-500 font-sans ${bgConfig}`}>
-      
-      {/* Surface Principal Molinete */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 text-white relative min-h-[550px]">
-        
-        {/* Top Controls */}
-        <div className="absolute top-5 left-5 right-5 flex items-center justify-between z-20">
-          <button 
-            onClick={() => router.push("/dashboard")}
-            className="flex items-center text-slate-300 hover:text-white bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-          >
-            <LogOut className="w-3.5 h-3.5 mr-1.5" />
-            <span>Panel Admin</span>
+    <main className={`min-h-dvh transition-colors ${surface} text-white lg:grid lg:grid-cols-[1fr_360px]`}>
+      <section className="relative flex min-h-[70dvh] flex-col items-center justify-center px-5 py-24 lg:min-h-dvh">
+        <div className="absolute inset-x-4 top-4 flex items-center justify-between gap-3">
+          <button onClick={() => router.push("/dashboard")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-bold text-slate-200">
+            <LogOut className="h-4 w-4" /> Panel
           </button>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-white transition"
-              title={soundEnabled ? "Silenciar audio" : "Activar sonido"}
-            >
-              {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5 text-rose-400" />}
+            <button onClick={() => setSoundEnabled((value) => !value)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-black/20" title={soundEnabled ? "Silenciar" : "Activar sonido"}>
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-rose-300" />}
             </button>
-
-            <span className="text-xs font-bold text-slate-200 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-lg">
-              📍 {sucursalName}
-            </span>
+            <span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black">{branchName}</span>
           </div>
         </div>
 
-        {/* Central Display */}
-        <div className="flex flex-col items-center justify-center text-center space-y-4 max-w-xl">
-          
-          {/* Avatar / Reconocimiento */}
-          <div className="relative animate-in zoom-in duration-200">
-            {ultimoResultado.clienteFoto ? (
-              <div className="relative">
-                <img
-                  src={ultimoResultado.clienteFoto}
-                  alt={ultimoResultado.clienteNombre || "Socio"}
-                  className="w-44 h-44 sm:w-52 sm:h-52 rounded-2xl object-cover border-2 border-white/80 shadow-2xl"
-                />
-                <div className="absolute -bottom-2 -right-2 p-1.5 bg-slate-950 rounded-full shadow-lg border border-slate-800">
-                  {ultimoResultado.estado === "ACTIVO" ? (
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                  ) : (
-                    <XCircle className="w-8 h-8 text-rose-500" />
-                  )}
-                </div>
-              </div>
+        <div className="w-full max-w-xl text-center">
+          <div className="mx-auto grid h-36 w-36 place-items-center overflow-hidden rounded-[32px] border border-white/15 bg-black/20 shadow-2xl">
+            {result.clienteFoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={result.clienteFoto} alt={result.clienteNombre || "Socio"} className="h-full w-full object-cover" />
+            ) : waiting ? (
+              <ScanLine className="h-16 w-16 animate-pulse text-cyan-300" />
+            ) : success ? (
+              <CheckCircle2 className="h-20 w-20 text-emerald-300" />
+            ) : result.estado === "ERROR" ? (
+              <AlertCircle className="h-20 w-20 text-amber-300" />
             ) : (
-              <div>
-                {ultimoResultado.estado === "ESPERANDO" && (
-                  <div className="w-36 h-36 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-lg">
-                    <ScanFace className="w-16 h-16 text-cyan-400 animate-pulse" />
-                  </div>
-                )}
-                {ultimoResultado.estado === "ACTIVO" && (
-                  <div className="w-36 h-36 rounded-2xl bg-emerald-900/60 border border-emerald-500/50 flex items-center justify-center shadow-lg">
-                    <CheckCircle2 className="w-20 h-20 text-emerald-400" />
-                  </div>
-                )}
-                {(ultimoResultado.estado === "VENCIDO" || ultimoResultado.estado === "DENEGADO") && (
-                  <div className="w-36 h-36 rounded-2xl bg-rose-900/60 border border-rose-500/50 flex items-center justify-center shadow-lg">
-                    <XCircle className="w-20 h-20 text-rose-400" />
-                  </div>
-                )}
-                {ultimoResultado.estado === "ERROR" && (
-                  <div className="w-36 h-36 rounded-2xl bg-amber-900/60 border border-amber-500/50 flex items-center justify-center shadow-lg">
-                    <AlertCircle className="w-20 h-20 text-amber-400" />
-                  </div>
-                )}
-              </div>
+              <XCircle className="h-20 w-20 text-rose-300" />
             )}
           </div>
 
-          {/* Nombre */}
-          {ultimoResultado.clienteNombre && (
-            <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
-              {ultimoResultado.clienteNombre}
-            </h1>
-          )}
-          
-          {/* Mensaje de Estado */}
-          <h2 className="text-lg sm:text-2xl font-bold text-slate-100">
-            {ultimoResultado.mensaje}
-          </h2>
+          {result.clienteNombre && <h1 className="mt-6 text-3xl font-black">{result.clienteNombre}</h1>}
+          <p className={`mt-4 text-xl font-black ${waiting ? "text-slate-300" : success ? "text-emerald-200" : "text-white"}`}>{result.mensaje}</p>
+
+          <form
+            className="mx-auto mt-8 max-w-md"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void processCredential(credential);
+            }}
+          >
+            <input
+              ref={inputRef}
+              value={credential}
+              onChange={(event) => setCredential(event.target.value)}
+              disabled={!branchId || loading}
+              autoComplete="off"
+              inputMode="text"
+              placeholder="DNI o lectura del scanner"
+              className="h-14 w-full rounded-2xl border border-white/15 bg-black/25 px-4 text-center text-lg font-black outline-none placeholder:text-slate-500 focus:border-cyan-400 disabled:opacity-50"
+            />
+            <button disabled={!credential.trim() || loading || !branchId} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-500 text-sm font-black text-slate-950 disabled:opacity-40">
+              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+              Validar ingreso
+            </button>
+          </form>
+
+          <div className="mx-auto mt-4 max-w-md">
+            <button onClick={() => void toggleCamera()} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 text-xs font-black">
+              {cameraActive ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+              {cameraActive ? "Cerrar cámara" : "Escanear QR con cámara"}
+            </button>
+            {cameraError && <p className="mt-2 rounded-xl bg-amber-400/10 p-3 text-xs font-semibold text-amber-100">{cameraError}</p>}
+          </div>
+
+          <video ref={videoRef} muted playsInline className={`${cameraActive ? "mt-4 block" : "hidden"} mx-auto aspect-square w-full max-w-sm rounded-3xl border border-white/15 bg-black object-cover`} />
         </div>
+      </section>
 
-        {/* Input invisible para pistola USB o teclado */}
-        <form onSubmit={handleScanForm} className="absolute bottom-5 opacity-30 hover:opacity-100 transition">
-          <input
-            ref={inputRef}
-            type="text"
-            value={dni}
-            onChange={(e) => setDni(e.target.value)}
-            placeholder="DNI o Tarjeta..."
-            className="px-3 py-1.5 rounded-lg text-xs bg-slate-900 text-white placeholder-slate-500 border border-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
-            autoFocus
-            autoComplete="off"
-          />
-        </form>
-      </div>
-
-      {/* Panel Lateral: Historial de Accesos */}
-      <div className="w-full lg:w-80 bg-slate-900/90 border-t lg:border-t-0 lg:border-l border-slate-800 p-4 flex flex-col">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-cyan-400" />
-            <span>Últimos Accesos</span>
-          </h3>
-          <span className="text-[10px] text-cyan-400 font-mono font-bold">En vivo</span>
+      <aside className="border-t border-white/10 bg-[#0b0f15] p-5 lg:border-l lg:border-t-0">
+        <div className="flex items-center justify-between">
+          <div><p className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-400">Terminal</p><h2 className="mt-1 text-lg font-black">Últimos ingresos</h2></div>
+          <button disabled={!branchId} onClick={() => branchId && void loadHistory(branchId)} className="grid h-9 w-9 place-items-center rounded-xl bg-white/5 text-slate-400"><RefreshCw className="h-4 w-4" /></button>
         </div>
-        
-        <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] lg:max-h-none pr-1">
-          {historial.map((ingreso) => {
-            const esOk = ingreso.estado === "ACTIVO" || ingreso.estado === "permitido";
-
-            return (
-              <div 
-                key={ingreso.id} 
-                className={`p-2.5 rounded-xl border text-xs flex justify-between items-center ${
-                  esOk 
-                    ? "bg-slate-950 border-slate-800" 
-                    : "bg-rose-950/40 border-rose-900/60"
-                }`}
-              >
-                <div className="min-w-0 pr-2">
-                  <p className="font-bold text-white truncate">
-                    {ingreso.cliente?.nombre} {ingreso.cliente?.apellido}
-                  </p>
-                  <p className="text-[10px] text-slate-400 font-mono font-medium">DNI: {ingreso.documento}</p>
-                </div>
-
-                <div className="text-right flex-shrink-0">
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                    esOk ? "bg-emerald-950 text-emerald-400 border-emerald-800" : "bg-rose-950 text-rose-400 border-rose-800"
-                  }`}>
-                    {esOk ? "PERMITIDO" : ingreso.estado}
-                  </span>
-                  <p className="text-[9px] text-slate-500 mt-0.5 font-mono font-semibold">
-                    {new Date(ingreso.fechaHora).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
+        <div className="mt-5 space-y-2">
+          {history.length ? history.map((item) => (
+            <article key={item.id} className="rounded-2xl border border-white/7 bg-white/[0.035] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><p className="truncate text-sm font-black">{item.cliente.nombre} {item.cliente.apellido}</p><p className="mt-1 truncate text-[10px] text-slate-500">{item.motivo || "Registro de acceso"}</p></div>
+                <span className={`rounded-full px-2 py-1 text-[9px] font-black ${item.estado === "ACTIVO" ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"}`}>{item.estado}</span>
               </div>
-            );
-          })}
-
-          {historial.length === 0 && (
-            <p className="text-slate-500 text-center text-xs py-8 font-medium">
-              Sin ingresos registrados hoy.
-            </p>
-          )}
+              <p className="mt-2 flex items-center gap-1 text-[10px] font-bold text-slate-600"><Clock3 className="h-3 w-3" />{new Date(item.fechaHora).toLocaleString("es-AR")}</p>
+            </article>
+          )) : <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-600">Todavía no hay movimientos.</p>}
         </div>
-      </div>
-    </div>
+      </aside>
+    </main>
   );
 }
