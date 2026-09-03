@@ -55,8 +55,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     void getStaffNavigationContext().then((result) => {
       if (!result.success || !result.data) {
-        localStorage.removeItem("activeSucursalId");
-        localStorage.removeItem("activeSucursalName");
         router.replace("/login");
         return;
       }
@@ -67,15 +65,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setTenantName(result.data.tenantName);
 
       if (!result.data.branchId || !result.data.branchName) {
-        localStorage.removeItem("activeSucursalId");
-        localStorage.removeItem("activeSucursalName");
         router.replace("/seleccionar-sucursal");
         return;
       }
 
       setSucursalNombre(result.data.branchName);
-      localStorage.setItem("activeSucursalId", String(result.data.branchId));
-      localStorage.setItem("activeSucursalName", result.data.branchName);
     });
   }, [router]);
 
@@ -83,8 +77,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
     } finally {
-      localStorage.removeItem("activeSucursalId");
-      localStorage.removeItem("activeSucursalName");
       router.replace("/login");
       router.refresh();
     }
