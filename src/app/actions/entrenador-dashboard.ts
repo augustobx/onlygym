@@ -1,6 +1,6 @@
 "use server";
 
-import { RolTenant } from "@prisma/client";
+import { Prisma, RolTenant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext, requireTenantModule } from "@/lib/tenant-context";
@@ -42,13 +42,12 @@ export async function getDashboardEntrenador() {
     const endToday = new Date(startToday);
     endToday.setDate(endToday.getDate() + 1);
 
-    const trainerFilter = context.role === RolTenant.ENTRENADOR ? { entrenadorId: profile?.id ?? -1 } : {};
-    const memberWhere = {
+    const memberWhere: Prisma.ClienteWhereInput = {
       tenantId: context.tenantId,
       estado: "activo",
       sucursales: { some: { id: branch.id } },
-      ...trainerFilter,
-    } as const;
+      ...(context.role === RolTenant.ENTRENADOR ? { entrenadorId: profile?.id ?? -1 } : {}),
+    };
 
     const [members, classes, inactiveMembers, measurementsPending, workoutsToday] = await Promise.all([
       prisma.cliente.findMany({
