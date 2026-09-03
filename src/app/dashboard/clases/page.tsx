@@ -26,7 +26,7 @@ import {
   getClasesAdmin,
   registrarAsistenciaClase,
 } from "@/app/actions/gestion-fitness";
-import { buscarSociosParaClase, getClassOperationsContext } from "@/app/actions/clases-context";
+import { buscarSociosParaClase, cancelarReservaClaseOperativa, getClassOperationsContext } from "@/app/actions/clases-context";
 
 type Booking = {
   id: number;
@@ -218,7 +218,7 @@ export default function ClassesPage() {
 
   const handleCancelBooking = async (claseId: number, clienteId: number) => {
     if (!window.confirm("¿Cancelar esta reserva? Si era un cupo confirmado, se promoverá a la primera persona en espera.")) return;
-    const result = await administrarReservaManual(claseId, clienteId, "cancelar");
+    const result = await cancelarReservaClaseOperativa(claseId, clienteId);
     setMessage(result.success ? "Reserva cancelada" : result.error || "No se pudo cancelar la reserva");
     if (result.success) await load();
   };
