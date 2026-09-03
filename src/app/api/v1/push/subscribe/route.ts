@@ -15,6 +15,24 @@ function validKey(value: unknown) {
   return typeof value === "string" && value.length >= 8 && value.length <= 512;
 }
 
+export async function GET() {
+  try {
+    const context = await requireMemberContext();
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || "";
+    const subscriptions = await prisma.webPushSubscription.count({
+      where: { tenantId: context.tenantId, clienteId: context.clienteId },
+    });
+    return NextResponse.json({
+      success: true,
+      available: Boolean(publicKey),
+      subscribed: subscriptions > 0,
+      publicKey: publicKey || null,
+    });
+  } catch {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const context = await requireMemberContext();
