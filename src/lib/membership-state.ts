@@ -1,7 +1,7 @@
-export type MemberState = "none" | "active" | "expiring" | "expired";
+export type MembershipState = "none" | "active" | "expiring" | "expired";
 
 export type MembershipSnapshot = {
-  state: MemberState;
+  state: MembershipState;
   active: boolean;
   daysRemaining: number;
   expiration: Date | null;
