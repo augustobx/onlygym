@@ -1,5 +1,5 @@
 // OnlyGym PWA Service Worker
-const CACHE_NAME = "onlygym-static-v3";
+const CACHE_NAME = "onlygym-static-v4";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE_ASSETS = [
   OFFLINE_URL,
@@ -9,6 +9,18 @@ const PRECACHE_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
 ];
+
+function safePortalPath(value) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+    return "/portal/dashboard";
+  }
+  try {
+    const resolved = new URL(value, self.location.origin);
+    return resolved.origin === self.location.origin ? `${resolved.pathname}${resolved.search}${resolved.hash}` : "/portal/dashboard";
+  } catch {
+    return "/portal/dashboard";
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS)));
@@ -37,9 +49,7 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.pathname.startsWith("/api/")) return;
 
-  const isStaticAsset =
-    url.pathname.startsWith("/_next/static/") ||
-    PRECACHE_ASSETS.includes(url.pathname);
+  const isStaticAsset = url.pathname.startsWith("/_next/static/") || PRECACHE_ASSETS.includes(url.pathname);
   if (!isStaticAsset) return;
 
   event.respondWith(
@@ -66,7 +76,7 @@ self.addEventListener("push", (event) => {
     if (event.data) data.body = event.data.text();
   }
 
-  const requestedPath = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/portal/dashboard";
+  const requestedPath = safePortalPath(data.url);
   event.waitUntil(
     self.registration.showNotification(data.title || "OnlyGym", {
       body: data.body || "Tenés una nueva notificación.",
@@ -81,9 +91,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = typeof event.notification.data?.url === "string" && event.notification.data.url.startsWith("/")
-    ? event.notification.data.url
-    : "/portal/dashboard";
+  const path = safePortalPath(event.notification.data?.url);
   const target = new URL(path, self.location.origin).href;
 
   event.waitUntil(
