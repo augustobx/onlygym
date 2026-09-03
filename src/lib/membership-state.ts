@@ -1,11 +1,17 @@
-export type MembershipState = "none" | "active" | "expiring" | "expired";
+export type MemberState = "none" | "active" | "expiring" | "expired";
 
 export type MembershipSnapshot = {
-  state: MembershipState;
+  state: MemberState;
   active: boolean;
   daysRemaining: number;
   expiration: Date | null;
 };
+
+const DAY_MS = 86_400_000;
+
+function utcCalendarDay(value: Date) {
+  return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+}
 
 export function membershipSnapshot(
   expirationValue: string | Date | null | undefined,
@@ -20,13 +26,20 @@ export function membershipSnapshot(
     return { state: "none", active: false, daysRemaining: 0, expiration: null };
   }
 
+  // Las membresías vencen al final de su fecha calendario, no a la hora exacta
+  // almacenada en la base. Esto evita marcar como vencida una membresía durante
+  // el mismo día de vencimiento.
   expiration.setHours(23, 59, 59, 999);
   const diff = expiration.getTime() - now.getTime();
   if (diff < 0) {
     return { state: "expired", active: false, daysRemaining: 0, expiration };
   }
 
-  const daysRemaining = Math.max(0, Math.ceil(diff / 86_400_000));
+  // "Vence en N días" es una diferencia de fechas calendario. Si hoy es 3 y
+  // vence el 10, son 7 días aunque todavía falten algunas horas adicionales.
+  const calendarDiff = utcCalendarDay(expiration) - utcCalendarDay(now);
+  const daysRemaining = Math.max(0, Math.round(calendarDiff / DAY_MS));
+
   return {
     state: daysRemaining <= 7 ? "expiring" : "active",
     active: true,
