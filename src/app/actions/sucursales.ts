@@ -10,8 +10,14 @@ export async function getSucursales() {
   try {
     const context = await requireStaffContext();
     const sucursales = await prisma.sucursal.findMany({
-      where: { tenantId: context.tenantId, estado: "activo" },
-      orderBy: { id: "asc" },
+      where: {
+        tenantId: context.tenantId,
+        estado: "activo",
+        ...((context.role === RolTenant.RECEPCION || context.role === RolTenant.ENTRENADOR)
+          ? { usuarios: { some: { id: context.userId } } }
+          : {}),
+      },
+      orderBy: { nombre: "asc" },
     });
     return { success: true, data: serializeData(sucursales) };
   } catch (error) {
@@ -77,7 +83,6 @@ export async function createSucursal(data: {
       },
     });
 
-    // Crear horarios base por defecto para los 7 días de la semana
     const dias = [1, 2, 3, 4, 5, 6, 0];
     for (const dia of dias) {
       await prisma.configuracionHorario.create({
