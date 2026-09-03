@@ -17,14 +17,11 @@ function parseReportRange(desde: string, hasta: string) {
   return { fechaDesde, fechaHasta };
 }
 
-export async function getReportes(desde: string, hasta: string, sucursalId?: number) {
+export async function getReportes(desde: string, hasta: string, _legacySucursalId?: number) {
   try {
     const context = await requireStaffContext({ roles: REPORT_ROLES });
     await requireTenantModule(context.tenantId, "reportes");
     if (!context.branchId) throw new Error("Seleccioná una sucursal antes de consultar reportes");
-    if (sucursalId && sucursalId !== context.branchId) {
-      throw new Error("La sucursal solicitada no coincide con la sede activa");
-    }
 
     const branchId = context.branchId;
     const { fechaDesde, fechaHasta } = parseReportRange(desde, hasta);
