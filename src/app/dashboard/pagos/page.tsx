@@ -13,6 +13,7 @@ import {
   Search,
   WalletCards,
 } from "lucide-react";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
 import {
   getClienteParaCobro,
   getMembresiasDisponibles,
@@ -20,6 +21,7 @@ import {
   registrarPago,
   searchClientes,
 } from "@/app/actions/caja";
+import { isMembershipActive } from "@/lib/membership-state";
 
 function formatMoney(value: unknown) {
   const amount = typeof value === "number" ? value : Number(value) || 0;
@@ -52,35 +54,42 @@ export default function PagosPage() {
   const loadPagosHoy = (branchId: number) => {
     void getMovimientosHoy(branchId).then((result) => {
       if (result.success && result.data) setPagosHoy(result.data);
+      else if (!result.success) setError(result.error || "No se pudieron cargar los cobros del día");
     });
   };
 
   useEffect(() => {
-    const storedBranch = Number(localStorage.getItem("activeSucursalId") || 0);
-    const storedName = localStorage.getItem("activeSucursalName");
-    if (storedName) setSucursalNombre(storedName);
-    if (!Number.isInteger(storedBranch) || storedBranch <= 0) {
-      setError("Seleccioná una sucursal antes de registrar cobros.");
-      setBranchReady(true);
-      return;
-    }
-
-    setSucursalId(storedBranch);
-    setBranchReady(true);
-    loadPagosHoy(storedBranch);
-
-    void getMembresiasDisponibles().then((result) => {
-      if (result.success && result.data) {
-        setMembresias(result.data.map((item: any) => ({ ...item, precio: Number(item.precio) })));
-      } else if (!result.success) {
-        setError(result.error || "No se pudieron cargar los planes");
+    void (async () => {
+      const navigation = await getStaffNavigationContext();
+      if (!navigation.success || !navigation.data) {
+        setError("No se pudo validar la sede activa.");
+        setBranchReady(true);
+        return;
       }
-    });
 
-    const clienteId = Number(new URLSearchParams(window.location.search).get("clienteId") || 0);
-    if (Number.isInteger(clienteId) && clienteId > 0) {
-      setLoadingInitialMember(true);
-      void getClienteParaCobro(clienteId, storedBranch).then((result) => {
+      const branchId = navigation.data.branchId;
+      if (!branchId) {
+        setError("Seleccioná una sucursal antes de registrar cobros.");
+        setBranchReady(true);
+        return;
+      }
+
+      setSucursalId(branchId);
+      setSucursalNombre(navigation.data.branchName || "Sucursal activa");
+      setBranchReady(true);
+      loadPagosHoy(branchId);
+
+      const membershipsResult = await getMembresiasDisponibles();
+      if (membershipsResult.success && membershipsResult.data) {
+        setMembresias(membershipsResult.data.map((item: any) => ({ ...item, precio: Number(item.precio) })));
+      } else {
+        setError(membershipsResult.error || "No se pudieron cargar los planes");
+      }
+
+      const clienteId = Number(new URLSearchParams(window.location.search).get("clienteId") || 0);
+      if (Number.isInteger(clienteId) && clienteId > 0) {
+        setLoadingInitialMember(true);
+        const result = await getClienteParaCobro(clienteId, branchId);
         if (result.success && result.data) {
           setSelectedCliente(result.data);
           setSearch(`${result.data.nombre} ${result.data.apellido}`);
@@ -88,8 +97,8 @@ export default function PagosPage() {
           setError(result.error || "No se pudo cargar el socio seleccionado");
         }
         setLoadingInitialMember(false);
-      });
-    }
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -101,6 +110,7 @@ export default function PagosPage() {
     const timer = window.setTimeout(() => {
       void searchClientes(search, sucursalId).then((result) => {
         if (result.success && result.data) setClientes(result.data);
+        else if (!result.success) setError(result.error || "No se pudieron buscar socios");
       });
     }, 250);
     return () => window.clearTimeout(timer);
@@ -138,6 +148,7 @@ export default function PagosPage() {
 
     if (result.success && result.data) {
       setSuccess(`Cobro registrado. ${result.data.membresia?.nombre || selectedMembresia.nombre} vigente hasta ${formatDate(result.data.fechaVencimiento)}.`);
+      setSelectedCliente((current: any) => current ? { ...current, ultimoPago: result.data } : current);
       setSelectedMembresia(null);
       setNotas("");
       loadPagosHoy(sucursalId);
@@ -148,7 +159,7 @@ export default function PagosPage() {
   };
 
   const currentPayment = selectedCliente?.ultimoPago || selectedCliente?.pagos?.[0] || null;
-  const currentPaymentActive = currentPayment && new Date(currentPayment.fechaVencimiento) >= new Date();
+  const currentPaymentActive = isMembershipActive(currentPayment?.fechaVencimiento);
 
   if (!branchReady) return <div className="py-20 text-center text-sm font-semibold text-slate-500">Preparando cobros…</div>;
 
@@ -177,7 +188,7 @@ export default function PagosPage() {
       </header>
 
       {success && <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-950"><span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-700" />{success}</span>{selectedCliente && <Link href={`/dashboard/clientes/${selectedCliente.id}`} className="shrink-0 font-black underline">Ver ficha</Link>}</div>}
-      {error && <div className="flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-950"><AlertCircle className="h-4 w-4 text-rose-700" />{error}</div>}
+      {error && <button onClick={() => setError(null)} className="flex w-full items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-left text-xs font-semibold text-rose-950"><AlertCircle className="h-4 w-4 text-rose-700" />{error}</button>}
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <section className="space-y-5 rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs lg:col-span-7">
@@ -186,10 +197,10 @@ export default function PagosPage() {
             {selectedCliente ? (
               <div className="flex flex-col gap-3 rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-cyan-600 text-sm font-black text-white">{selectedCliente.nombre?.charAt(0)}{selectedCliente.apellido?.charAt(0)}</div><div><p className="font-black text-slate-950">{selectedCliente.nombre} {selectedCliente.apellido}</p><p className="text-xs font-semibold text-slate-600">DNI {selectedCliente.documento}</p></div></div>
-                <div className="flex items-center gap-2"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${currentPaymentActive ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-rose-300 bg-rose-50 text-rose-800"}`}>{currentPaymentActive ? `Al día · ${formatDate(currentPayment.fechaVencimiento)}` : "Sin membresía vigente"}</span><Link href={`/dashboard/clientes/${selectedCliente.id}`} title="Abrir ficha del socio" className="rounded-lg border border-cyan-200 bg-white p-2 text-cyan-700 hover:bg-cyan-50"><ExternalLink className="h-4 w-4" /></Link></div>
+                <div className="flex items-center gap-2"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${currentPaymentActive ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-rose-300 bg-rose-50 text-rose-800"}`}>{currentPaymentActive ? `Al día · ${formatDate(currentPayment.fechaVencimiento)}` : currentPayment ? `Vencida · ${formatDate(currentPayment.fechaVencimiento)}` : "Sin membresía vigente"}</span><Link href={`/dashboard/clientes/${selectedCliente.id}`} title="Abrir ficha del socio" className="rounded-lg border border-cyan-200 bg-white p-2 text-cyan-700 hover:bg-cyan-50"><ExternalLink className="h-4 w-4" /></Link></div>
               </div>
             ) : (
-              <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} disabled={loadingInitialMember} placeholder={loadingInitialMember ? "Cargando socio…" : "DNI, nombre o apellido"} className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20" autoFocus />{clientes.length > 0 && <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">{clientes.map((cliente) => { const ultimo = cliente.pagos?.[0]; const alDia = ultimo && new Date(ultimo.fechaVencimiento) >= new Date(); return <button key={cliente.id} onClick={() => selectCliente(cliente)} className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2.5 text-left last:border-b-0 hover:bg-cyan-50"><div><p className="text-sm font-bold text-slate-950">{cliente.nombre} {cliente.apellido}</p><p className="text-[11px] font-semibold text-slate-500">DNI {cliente.documento}</p></div><span className={`text-[10px] font-black ${alDia ? "text-emerald-700" : "text-rose-700"}`}>{alDia ? "AL DÍA" : "A RENOVAR"}</span></button>; })}</div>}</div>
+              <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} disabled={loadingInitialMember} placeholder={loadingInitialMember ? "Cargando socio…" : "DNI, nombre o apellido"} className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-medium outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20" autoFocus />{clientes.length > 0 && <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">{clientes.map((cliente) => { const ultimo = cliente.pagos?.[0]; const alDia = isMembershipActive(ultimo?.fechaVencimiento); return <button key={cliente.id} onClick={() => selectCliente(cliente)} className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2.5 text-left last:border-b-0 hover:bg-cyan-50"><div><p className="text-sm font-bold text-slate-950">{cliente.nombre} {cliente.apellido}</p><p className="text-[11px] font-semibold text-slate-500">DNI {cliente.documento}</p></div><span className={`text-[10px] font-black ${alDia ? "text-emerald-700" : "text-rose-700"}`}>{alDia ? "AL DÍA" : "A RENOVAR"}</span></button>; })}</div>}</div>
             )}
           </div>
 
