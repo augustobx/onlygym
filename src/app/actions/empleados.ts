@@ -1,27 +1,43 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { RolTenant } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext } from "@/lib/tenant-context";
-import { RolTenant } from "@prisma/client";
 import { writeAudit } from "@/lib/audit";
+import {
+  staffRoleFromUiLevel,
+  staffRoleNeedsBranch,
+  staffUiLevelFromRole,
+  validateStaffAdminMutation,
+} from "@/lib/staff-admin-policy";
 
-function uiLevelFromRole(role: RolTenant) {
-  if (role === RolTenant.OWNER || role === RolTenant.ADMIN) return "admin";
-  if (role === RolTenant.ENTRENADOR) return "entrenador";
-  return "cajero";
+const ADMIN_ROLES = [RolTenant.OWNER, RolTenant.ADMIN];
+
+type EmployeeUpdate = {
+  name?: string;
+  nivel?: string;
+  estado?: string;
+  sucursalIds?: number[];
+};
+
+function revalidateStaffPaths() {
+  revalidatePath("/dashboard/empleados");
+  revalidatePath("/dashboard/seguridad");
+  revalidatePath("/seleccionar-sucursal");
+  revalidatePath("/dashboard");
 }
 
-function roleFromUiLevel(level: string) {
-  if (level === "admin" || level === "supervisor") return RolTenant.ADMIN;
-  if (level === "entrenador") return RolTenant.ENTRENADOR;
-  return RolTenant.RECEPCION;
+function normalizeBranchIds(values: number[] | undefined) {
+  if (values === undefined) return null;
+  if (!Array.isArray(values) || values.some((value) => !Number.isInteger(value) || value <= 0)) return undefined;
+  return [...new Set(values)];
 }
 
 export async function getEmpleados() {
   try {
-    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const context = await requireStaffContext({ roles: ADMIN_ROLES });
     const memberships = await prisma.tenantUsuario.findMany({
       where: { tenantId: context.tenantId },
       include: {
@@ -34,55 +50,124 @@ export async function getEmpleados() {
             createdAt: true,
             sucursales: {
               where: { tenantId: context.tenantId },
-              select: { id: true, nombre: true },
+              select: { id: true, nombre: true, estado: true },
+              orderBy: { nombre: "asc" },
             },
             _count: { select: { tenantMemberships: true } },
           },
         },
       },
-      orderBy: { user: { createdAt: "desc" } },
+      orderBy: [{ rol: "asc" }, { user: { name: "asc" } }],
     });
 
     const users = memberships.map((membership) => ({
       ...membership.user,
-      nivel: uiLevelFromRole(membership.rol),
+      nivel: staffUiLevelFromRole(membership.rol),
       estado: membership.estado,
       rolTenant: membership.rol,
       identidadCompartida: membership.user._count.tenantMemberships > 1,
+      isSelf: membership.userId === context.userId,
     }));
     return { success: true, data: serializeData(users) };
-  } catch {
-    return { success: false, error: "Error obteniendo empleados" };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Error obteniendo empleados" };
   }
 }
 
-export async function updateEmpleado(id: string, data: { name?: string; nivel?: string; estado?: string }) {
+export async function updateEmpleado(id: string, data: EmployeeUpdate) {
   try {
-    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
+    const context = await requireStaffContext({ roles: ADMIN_ROLES });
     const owned = await prisma.tenantUsuario.findUnique({
       where: { tenantId_userId: { tenantId: context.tenantId, userId: id } },
-      include: { user: { select: { name: true, _count: { select: { tenantMemberships: true } } } } },
+      include: {
+        user: {
+          select: {
+            name: true,
+            sucursales: { where: { tenantId: context.tenantId }, select: { id: true } },
+            tenantMemberships: { where: { estado: "activo" }, select: { tenantId: true } },
+            _count: { select: { tenantMemberships: true } },
+          },
+        },
+      },
     });
     if (!owned) return { success: false, error: "Empleado no encontrado" };
 
     const requestedName = data.name?.trim();
+    if (data.name !== undefined && !requestedName) return { success: false, error: "El nombre no puede quedar vacío" };
     if (requestedName && requestedName !== owned.user.name && owned.user._count.tenantMemberships > 1) {
       return { success: false, error: "Esta identidad pertenece a más de un tenant; el nombre global no puede modificarse desde un gimnasio" };
     }
 
-    const tenantUpdate: { rol?: RolTenant; estado?: string } = {};
-    if (data.nivel && owned.rol !== RolTenant.OWNER) tenantUpdate.rol = roleFromUiLevel(data.nivel);
-    if (data.estado) tenantUpdate.estado = data.estado === "activo" ? "activo" : "inactivo";
+    const nextRole = data.nivel !== undefined ? staffRoleFromUiLevel(data.nivel) : owned.rol;
+    if (!nextRole) return { success: false, error: "Rol de empleado inválido" };
+
+    const nextState = data.estado === undefined
+      ? (owned.estado === "activo" ? "activo" : "inactivo")
+      : data.estado === "activo" || data.estado === "inactivo"
+        ? data.estado
+        : null;
+    if (!nextState) return { success: false, error: "Estado de empleado inválido" };
+
+    const normalizedRequestedBranches = normalizeBranchIds(data.sucursalIds);
+    if (normalizedRequestedBranches === undefined) return { success: false, error: "La lista de sedes es inválida" };
+    const currentBranchIds = owned.user.sucursales.map(({ id: branchId }) => branchId);
+    const effectiveBranchIds = normalizedRequestedBranches ?? currentBranchIds;
+
+    const policyError = validateStaffAdminMutation({
+      actorRole: context.role,
+      targetRole: owned.rol,
+      isSelf: id === context.userId,
+      nextRole,
+      nextState,
+      branchIds: effectiveBranchIds,
+    });
+    if (policyError) return { success: false, error: policyError };
+
+    let validatedBranchIds = effectiveBranchIds;
+    if (staffRoleNeedsBranch(nextRole)) {
+      const branches = await prisma.sucursal.findMany({
+        where: { tenantId: context.tenantId, estado: "activo", id: { in: effectiveBranchIds } },
+        select: { id: true },
+      });
+      if (branches.length !== effectiveBranchIds.length) {
+        return { success: false, error: "Una de las sedes seleccionadas no está disponible" };
+      }
+      validatedBranchIds = branches.map(({ id: branchId }) => branchId);
+    }
+
+    const shouldRewriteBranches = data.sucursalIds !== undefined || nextRole !== owned.rol;
+    const shouldCloseSessions = owned.estado === "activo"
+      && nextState === "inactivo"
+      && owned.user.tenantMemberships.length <= 1;
 
     await prisma.$transaction(async (tx) => {
       if (requestedName && requestedName !== owned.user.name) {
         await tx.user.update({ where: { id }, data: { name: requestedName } });
       }
-      if (Object.keys(tenantUpdate).length) {
+
+      if (nextRole !== owned.rol || nextState !== owned.estado) {
         await tx.tenantUsuario.update({
           where: { tenantId_userId: { tenantId: context.tenantId, userId: id } },
-          data: tenantUpdate,
+          data: { rol: nextRole, estado: nextState },
         });
+      }
+
+      if (shouldRewriteBranches) {
+        await tx.user.update({
+          where: { id },
+          data: {
+            sucursales: {
+              disconnect: currentBranchIds.map((branchId) => ({ id: branchId })),
+              ...(staffRoleNeedsBranch(nextRole)
+                ? { connect: validatedBranchIds.map((branchId) => ({ id: branchId })) }
+                : {}),
+            },
+          },
+        });
+      }
+
+      if (shouldCloseSessions) {
+        await tx.session.deleteMany({ where: { userId: id } });
       }
     });
 
@@ -92,43 +177,32 @@ export async function updateEmpleado(id: string, data: { name?: string; nivel?: 
       accion: "empleado.actualizar",
       entidad: "TenantUsuario",
       entidadId: owned.id,
-      metadata: { campos: Object.keys(data) },
+      metadata: {
+        rolAnterior: owned.rol,
+        rolNuevo: nextRole,
+        estadoAnterior: owned.estado,
+        estadoNuevo: nextState,
+        sedes: staffRoleNeedsBranch(nextRole) ? validatedBranchIds : [],
+        sesionesCerradas: shouldCloseSessions,
+      },
     });
-    revalidatePath("/dashboard/empleados");
+    revalidateStaffPaths();
     return { success: true };
-  } catch {
-    return { success: false, error: "Error actualizando empleado" };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Error actualizando empleado" };
   }
 }
 
-export async function toggleEmpleadoEstado(id: string, estadoActual: string) {
+export async function toggleEmpleadoEstado(id: string, _estadoActual?: string) {
   try {
-    const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
-    const owned = await prisma.tenantUsuario.findUnique({
+    const context = await requireStaffContext({ roles: ADMIN_ROLES });
+    const membership = await prisma.tenantUsuario.findUnique({
       where: { tenantId_userId: { tenantId: context.tenantId, userId: id } },
-      select: { id: true, rol: true, estado: true },
+      select: { estado: true },
     });
-    if (!owned) return { success: false, error: "Empleado no encontrado" };
-    if (owned.rol === RolTenant.OWNER && id === context.userId) {
-      return { success: false, error: "No podés desactivar tu propia membresía OWNER" };
-    }
-
-    const nuevoEstado = estadoActual === "activo" ? "inactivo" : "activo";
-    await prisma.tenantUsuario.update({
-      where: { tenantId_userId: { tenantId: context.tenantId, userId: id } },
-      data: { estado: nuevoEstado },
-    });
-    await writeAudit({
-      tenantId: context.tenantId,
-      actorUserId: context.userId,
-      accion: "empleado.cambiar_estado",
-      entidad: "TenantUsuario",
-      entidadId: owned.id,
-      metadata: { estadoAnterior: owned.estado, estadoNuevo: nuevoEstado },
-    });
-    revalidatePath("/dashboard/empleados");
-    return { success: true };
-  } catch {
-    return { success: false, error: "Error cambiando estado" };
+    if (!membership) return { success: false, error: "Empleado no encontrado" };
+    return updateEmpleado(id, { estado: membership.estado === "activo" ? "inactivo" : "activo" });
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Error cambiando estado" };
   }
 }
