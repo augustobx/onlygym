@@ -1,87 +1,94 @@
 // OnlyGym PWA Service Worker
-const CACHE_NAME = "onlygym-cache-v1";
+const CACHE_NAME = "onlygym-static-v2";
 const OFFLINE_URL = "/offline.html";
-
-const PRECACHE_ASSETS = [
-  "/",
-  "/manifest.webmanifest",
-  "/icons/icon-192x192.png",
-  "/icons/icon-512x512.png",
-];
+const PRECACHE_ASSETS = [OFFLINE_URL, "/manifest.json", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS).catch(() => {});
-    })
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS)));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
   );
   self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(OFFLINE_URL) || caches.match("/");
-      })
-    );
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Las páginas autenticadas y las APIs siempre salen de red. Si no hay red,
+  // mostramos una pantalla neutra y nunca una ficha personal cacheada.
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    return;
   }
+  if (url.pathname.startsWith("/api/")) return;
+
+  const isStaticAsset =
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname === "/icon.svg" ||
+    url.pathname === "/manifest.json" ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname === OFFLINE_URL;
+
+  if (!isStaticAsset) return;
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      const network = fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => cached);
+      return cached || network;
+    }),
+  );
 });
 
-// Web Push Notification Handler
 self.addEventListener("push", (event) => {
-  let data = { title: "OnlyGym", body: "Tienes una nueva notificación de tu gimnasio." };
+  let data = { title: "OnlyGym", body: "Tenés una nueva notificación de tu gimnasio.", url: "/portal/dashboard" };
   try {
-    if (event.data) {
-      data = event.data.json();
-    }
-  } catch (e) {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
     if (event.data) data.body = event.data.text();
   }
 
-  const options = {
-    body: data.body,
-    icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon-192x192.png",
-    vibrate: [100, 50, 100],
-    data: {
-      url: data.url || "/portal/dashboard",
-    },
-  };
-
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  const requestedPath = typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/portal/dashboard";
+  event.waitUntil(
+    self.registration.showNotification(data.title || "OnlyGym", {
+      body: data.body || "Tenés una nueva notificación.",
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: { url: requestedPath },
+      tag: data.tag || undefined,
+      renotify: Boolean(data.tag),
+    }),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || "/portal/dashboard";
+  const path = typeof event.notification.data?.url === "string" && event.notification.data.url.startsWith("/")
+    ? event.notification.data.url
+    : "/portal/dashboard";
+  const target = new URL(path, self.location.origin).href;
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if (client.url.includes(urlToOpen) && "focus" in client) {
-          return client.focus();
-        }
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url === target && "focus" in client) return client.focus();
       }
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-    })
+      return self.clients.openWindow ? self.clients.openWindow(target) : undefined;
+    }),
   );
 });
