@@ -13,7 +13,7 @@ export function assertActiveMemberBranch(activeBranchId: number | null | undefin
 }
 
 export function resolveNewMemberBranches(
-  role: MemberOperationRole,
+  role: MemberOperationRole | string,
   activeBranchId: number | null | undefined,
   requestedBranchIds: number[],
 ) {
