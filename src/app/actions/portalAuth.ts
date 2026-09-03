@@ -2,6 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
+import { membershipSnapshot } from "@/lib/membership-state";
 import { prisma } from "@/lib/prisma";
 import { serializeData } from "@/lib/serialize";
 import { MEMBER_SESSION_COOKIE, hashSessionToken, requireMemberContext } from "@/lib/member-context";
@@ -229,7 +230,10 @@ export async function getPortalData() {
     return { success: true, data: serializeData({
       ...cliente,
       tenant: context.tenant,
-      pagos: cliente.pagos.map((p) => ({ ...p, monto: Number(p.monto), membresia: { ...p.membresia, precio: Number(p.membresia.precio) } })),
+      pagos: cliente.pagos.map((p) => {
+        const normalizedExpiration = membershipSnapshot(p.fechaVencimiento).expiration || p.fechaVencimiento;
+        return { ...p, fechaVencimiento: normalizedExpiration, monto: Number(p.monto), membresia: { ...p.membresia, precio: Number(p.membresia.precio) } };
+      }),
       cuentaCorriente: cliente.cuentaCorriente ? {
         ...cliente.cuentaCorriente,
         saldo: Number(cliente.cuentaCorriente.saldo),
