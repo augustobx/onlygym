@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { getStaffNavigationContext } from "@/app/actions/auth-actions";
 import { createCliente } from "@/app/actions/clientes";
 import { getSucursales } from "@/app/actions/sucursales";
 import { buildMemberWelcomeMessage, buildWhatsAppUrl } from "@/lib/whatsapp";
-import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
@@ -12,13 +14,14 @@ import {
   Camera,
   CheckCircle2,
   Copy,
+  CreditCard,
+  MapPin,
   MessageCircle,
   Save,
   Upload,
   UserPlus,
   X,
 } from "lucide-react";
-import Link from "next/link";
 
 type CreatedMember = {
   id: number;
@@ -30,98 +33,110 @@ type CreatedMember = {
 
 export default function NuevoClientePage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [branchReady, setBranchReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdMember, setCreatedMember] = useState<CreatedMember | null>(null);
   const [copied, setCopied] = useState(false);
-
   const [sucursales, setSucursales] = useState<any[]>([]);
   const [selectedSucursales, setSelectedSucursales] = useState<number[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<number | null>(null);
+  const [activeBranchName, setActiveBranchName] = useState("Sucursal activa");
+  const [role, setRole] = useState<string | null>(null);
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
-    async function loadSucursales() {
-      const res = await getSucursales();
-      if (res.success && res.data) {
-        setSucursales(res.data);
-        if (res.data.length > 0) {
-          const activeSId = localStorage.getItem("activeSucursalId");
-          const defaultId = activeSId ? parseInt(activeSId) : res.data[0].id;
-          const validDefault = res.data.some((branch: any) => branch.id === defaultId) ? defaultId : res.data[0].id;
-          setSelectedSucursales([validDefault]);
-        }
+    void (async () => {
+      const [navigation, branches] = await Promise.all([getStaffNavigationContext(), getSucursales()]);
+
+      if (navigation.success && navigation.data) {
+        setRole(navigation.data.role);
+        setActiveBranchId(navigation.data.branchId);
+        setActiveBranchName(navigation.data.branchName || "Sucursal activa");
+        if (navigation.data.branchId) setSelectedSucursales([navigation.data.branchId]);
+        else setError("Seleccioná una sucursal antes de dar de alta un socio.");
+      } else {
+        setError("No se pudo validar la sede activa.");
       }
-    }
-    loadSucursales();
+
+      if (branches.success && branches.data) setSucursales(branches.data);
+      else if (!branches.success) setError(branches.error || "No se pudieron cargar las sedes disponibles.");
+      setBranchReady(true);
+    })();
   }, []);
 
   const handleCheckboxChange = (id: number) => {
-    setSelectedSucursales((prev) =>
-      prev.includes(id) ? prev.filter((sId) => sId !== id) : [...prev, id]
-    );
+    if (!activeBranchId || id === activeBranchId || role === "RECEPCION") return;
+    setSelectedSucursales((current) => current.includes(id) ? current.filter((branchId) => branchId !== id) : [...current, id]);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
-
     if (file.size > 3 * 1024 * 1024) {
       setError("La imagen no debe superar los 3 MB.");
       return;
     }
-
     const reader = new FileReader();
     reader.onloadend = () => setFotoBase64(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    if (selectedSucursales.length === 0) {
-      setError("Debes seleccionar al menos una sucursal autorizada.");
-      setLoading(false);
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeBranchId || selectedSucursales.length === 0) {
+      setError("Seleccioná una sede activa antes de crear el socio.");
       return;
     }
 
-    const formData = new FormData(e.currentTarget);
-
+    setLoading(true);
+    setError(null);
+    const formData = new FormData(event.currentTarget);
     const data = {
-      documento: (formData.get("documento") as string).trim(),
-      nombre: (formData.get("nombre") as string).trim(),
-      apellido: (formData.get("apellido") as string).trim(),
-      telefono: (formData.get("telefono") as string)?.trim() || undefined,
-      email: (formData.get("email") as string)?.trim() || undefined,
-      direccion: (formData.get("direccion") as string)?.trim() || undefined,
+      documento: String(formData.get("documento") || "").trim(),
+      nombre: String(formData.get("nombre") || "").trim(),
+      apellido: String(formData.get("apellido") || "").trim(),
+      telefono: String(formData.get("telefono") || "").trim() || undefined,
+      email: String(formData.get("email") || "").trim() || undefined,
+      direccion: String(formData.get("direccion") || "").trim() || undefined,
       foto: fotoBase64 || undefined,
       estado: "activo" as const,
       sucursalesIds: selectedSucursales,
     };
 
-    const res = await createCliente(data);
-
-    if (!res.success || !res.data || !res.temporaryPassword) {
-      setError(res.error || "Ocurrió un error inesperado al dar de alta al socio.");
+    const result = await createCliente(data);
+    if (!result.success || !result.data || !result.temporaryPassword) {
+      setError(result.error || "Ocurrió un error inesperado al dar de alta al socio.");
       setLoading(false);
       return;
     }
 
     setCreatedMember({
-      id: res.data.id,
+      id: result.data.id,
       name: `${data.nombre} ${data.apellido}`.trim(),
       document: data.documento,
       phone: data.telefono,
-      temporaryPassword: res.temporaryPassword,
+      temporaryPassword: result.temporaryPassword,
     });
     setLoading(false);
   }
 
+  if (!branchReady) return <p className="py-20 text-center text-sm font-semibold text-slate-500">Preparando alta de socio…</p>;
+
+  if (!activeBranchId) {
+    return (
+      <div className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <MapPin className="mx-auto h-7 w-7 text-amber-700" />
+        <h1 className="mt-2 text-lg font-black text-amber-950">Seleccioná una sucursal</h1>
+        <p className="mt-1 text-sm text-amber-800">Cada alta se origina desde una sede activa y validada por el servidor.</p>
+        <Link href="/seleccionar-sucursal" className="mt-4 inline-flex rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white">Seleccionar sucursal</Link>
+      </div>
+    );
+  }
+
   if (createdMember) {
-    const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal/login` : "/portal/login";
+    const portalUrl = `${window.location.origin}/portal/login`;
     const welcomeMessage = buildMemberWelcomeMessage({
       name: createdMember.name,
       document: createdMember.document,
@@ -138,235 +153,74 @@ export default function NuevoClientePage() {
 
     return (
       <div className="mx-auto max-w-3xl space-y-5 font-sans">
-        <div className="rounded-2xl border border-emerald-300 bg-white shadow-sm overflow-hidden">
+        <section className="overflow-hidden rounded-2xl border border-emerald-300 bg-white shadow-sm">
           <div className="flex items-start gap-3 border-b border-emerald-200 bg-emerald-50 p-5">
-            <div className="rounded-xl bg-emerald-600 p-2 text-white">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-emerald-950">Socio creado correctamente</h2>
-              <p className="mt-1 text-xs font-medium text-emerald-800">
-                El perfil, el acceso al portal y la cuenta corriente ya quedaron habilitados.
-              </p>
-            </div>
+            <div className="rounded-xl bg-emerald-600 p-2 text-white"><CheckCircle2 className="h-5 w-5" /></div>
+            <div><h1 className="text-lg font-black text-emerald-950">Socio creado correctamente</h1><p className="mt-1 text-xs font-medium text-emerald-800">Perfil y portal listos. La cuenta corriente quedó creada sin crédito preautorizado.</p></div>
           </div>
 
           <div className="space-y-5 p-5">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black text-slate-950">{createdMember.name}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-slate-500">DNI {createdMember.document}</p>
-                </div>
-                <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800">
-                  Clave de un solo uso
-                </span>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Usuario</p>
-                  <code className="mt-1 block text-sm font-black text-slate-950">{createdMember.document}</code>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Contraseña temporal</p>
-                  <code className="mt-1 block text-sm font-black text-slate-950">{createdMember.temporaryPassword}</code>
-                </div>
-              </div>
-
-              <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-600">
-                Esta contraseña se muestra ahora para que puedas entregársela al socio. Al iniciar sesión deberá reemplazarla por una propia.
-              </p>
+              <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-black text-slate-950">{createdMember.name}</p><p className="mt-0.5 text-xs font-semibold text-slate-500">DNI {createdMember.document} · {activeBranchName}</p></div><span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800">Mostrar una sola vez</span></div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2"><Credential label="Usuario" value={createdMember.document} /><Credential label="Contraseña temporal" value={createdMember.temporaryPassword} /></div>
+              <p className="mt-3 text-[11px] font-medium leading-relaxed text-slate-600">Entregá estos datos ahora. En el primer ingreso el socio deberá reemplazar la contraseña temporal.</p>
             </div>
 
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Entregar acceso</p>
               <div className="flex flex-wrap gap-2">
-                {whatsappUrl ? (
-                  <a
-                    href={whatsappUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    Enviar por WhatsApp
-                  </a>
-                ) : (
-                  <span className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-500">
-                    Sin WhatsApp registrado
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  onClick={copyCredentials}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 transition hover:bg-slate-50"
-                >
-                  <Copy className="h-4 w-4" />
-                  {copied ? "Copiado" : "Copiar mensaje"}
-                </button>
+                {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white"><MessageCircle className="h-4 w-4" />Enviar por WhatsApp</a> : <span className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-500">Sin WhatsApp registrado</span>}
+                <button type="button" onClick={copyCredentials} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-800"><Copy className="h-4 w-4" />{copied ? "Copiado" : "Copiar mensaje"}</button>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+              <p className="text-xs font-black text-cyan-950">Siguiente paso recomendado</p>
+              <p className="mt-1 text-[11px] font-medium text-cyan-800">Asigná y cobrá la primera membresía para que el socio quede listo para ingresar.</p>
+              <div className="mt-3 flex flex-wrap gap-2"><Link href={`/dashboard/pagos?clienteId=${createdMember.id}`} className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-xs font-black text-white"><CreditCard className="h-4 w-4" />Cobrar primera membresía</Link><Link href={`/dashboard/clientes/${createdMember.id}`} className="inline-flex items-center gap-2 rounded-xl border border-cyan-300 bg-white px-4 py-2.5 text-xs font-black text-cyan-900">Abrir ficha<ArrowRight className="h-4 w-4" /></Link></div>
             </div>
 
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setCreatedMember(null);
-                  setCopied(false);
-                  setFotoBase64(null);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                <UserPlus className="h-4 w-4" />
-                Crear otro socio
-              </button>
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/clientes")}
-                  className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
-                >
-                  Volver a socios
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push(`/dashboard/clientes/${createdMember.id}`)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white hover:bg-slate-800"
-                >
-                  Abrir ficha del socio
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
+              <button type="button" onClick={() => { setCreatedMember(null); setCopied(false); setFotoBase64(null); setSelectedSucursales([activeBranchId]); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700"><UserPlus className="h-4 w-4" />Crear otro socio</button>
+              <button type="button" onClick={() => router.push("/dashboard/clientes")} className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">Volver a socios</button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 font-sans max-w-4xl mx-auto">
-      <div className="flex items-center justify-between bg-white p-5 rounded-xl border border-slate-200/90 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/clientes"
-            className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition shadow-2xs"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Nuevo socio</h2>
-            <p className="text-xs text-slate-600 font-medium mt-0.5">
-              Cargá sus datos y el sistema preparará automáticamente el portal y la cuenta corriente.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 font-sans">
+      <header className="flex items-center justify-between rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs">
+        <div className="flex items-center gap-3"><Link href="/dashboard/clientes" className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-700"><ArrowLeft className="h-4 w-4" /></Link><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700">Socios · {activeBranchName}</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">Nuevo socio</h1><p className="mt-0.5 text-xs font-medium text-slate-600">Alta, acceso al portal y próximo paso de membresía en un único recorrido.</p></div></div>
+      </header>
 
-      {error && (
-        <div className="p-3 bg-rose-50 border border-rose-300 text-rose-900 rounded-lg text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 text-rose-700" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <button onClick={() => setError(null)} className="flex w-full items-center gap-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-left text-xs font-semibold text-rose-900"><AlertCircle className="h-4 w-4 shrink-0 text-rose-700" />{error}</button>}
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-5 space-y-5">
-        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-          <div className="relative flex-shrink-0">
-            {fotoBase64 ? (
-              <img
-                src={fotoBase64}
-                alt="Foto socio"
-                className="w-16 h-16 rounded-lg object-cover border border-slate-200"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200">
-                <Camera className="w-6 h-6" />
-              </div>
-            )}
-            {fotoBase64 && (
-              <button
-                type="button"
-                onClick={() => setFotoBase64(null)}
-                className="absolute -top-1.5 -right-1.5 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 shadow-xs"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-900">Foto del socio</p>
-            <p className="text-[11px] text-slate-600">Se usa en la ficha y en el control de ingreso.</p>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 rounded-md text-xs font-medium shadow-2xs transition"
-            >
-              <Upload className="h-3.5 w-3.5 text-cyan-600" />
-              <span>{fotoBase64 ? "Cambiar foto" : "Subir foto"}</span>
-            </button>
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs">
+        <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="relative shrink-0">{fotoBase64 ? <img src={fotoBase64} alt="Foto socio" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400"><Camera className="h-6 w-6" /></div>}{fotoBase64 && <button type="button" onClick={() => setFotoBase64(null)} className="absolute -right-1.5 -top-1.5 rounded-full bg-rose-600 p-1 text-white"><X className="h-3 w-3" /></button>}</div>
+          <div className="space-y-1"><p className="text-xs font-bold text-slate-900">Foto del socio</p><p className="text-[11px] text-slate-600">Se usa en la ficha y en el control de ingreso.</p><input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" /><button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"><Upload className="h-3.5 w-3.5 text-cyan-600" />{fotoBase64 ? "Cambiar foto" : "Subir foto"}</button></div>
         </div>
 
-        <div>
-          <p className="mb-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Datos personales</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Nombre *</label>
-              <input type="text" name="nombre" required placeholder="Ej: Juan" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Apellido *</label>
-              <input type="text" name="apellido" required placeholder="Ej: Pérez" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">DNI *</label>
-              <input type="text" name="documento" required placeholder="Ej: 38450123" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg font-mono font-bold placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Teléfono / WhatsApp</label>
-              <input type="text" name="telefono" placeholder="Ej: +54 9 11 2345-6789" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none font-mono" />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Email</label>
-              <input type="email" name="email" placeholder="Ej: juan@email.com" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Dirección</label>
-              <input type="text" name="direccion" placeholder="Ej: Av. San Martín 123" className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg placeholder:text-slate-400 focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 focus:outline-none" />
-            </div>
-          </div>
+        <div><p className="mb-3 text-[10px] font-black uppercase tracking-wider text-slate-500">Datos personales</p><div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2"><Input label="Nombre *" name="nombre" placeholder="Ej: Juan" required /><Input label="Apellido *" name="apellido" placeholder="Ej: Pérez" required /><Input label="DNI *" name="documento" placeholder="Ej: 38450123" required mono /><Input label="Teléfono / WhatsApp" name="telefono" placeholder="Ej: +54 9 11 2345-6789" mono /><Input label="Email" name="email" placeholder="Ej: juan@email.com" type="email" /><Input label="Dirección" name="direccion" placeholder="Ej: Av. San Martín 123" /></div></div>
+
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Sedes habilitadas para acceso</p><p className="mt-1 text-[11px] text-slate-500">La sede activa siempre queda incluida. {role === "RECEPCION" ? "Recepción sólo puede dar de alta en esta sede." : "Podés sumar otras sedes si el socio también las utilizará."}</p></div><span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-[10px] font-black text-cyan-900"><MapPin className="h-3 w-3" />{activeBranchName}</span></div>
+          <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">{sucursales.map((branch) => { const locked = branch.id === activeBranchId || role === "RECEPCION"; return <label key={branch.id} className={`flex items-center gap-2 rounded-lg border p-2.5 ${selectedSucursales.includes(branch.id) ? "border-cyan-300 bg-cyan-50" : "border-slate-200 bg-slate-50"} ${locked ? "cursor-default" : "cursor-pointer hover:bg-slate-100"}`}><input type="checkbox" checked={selectedSucursales.includes(branch.id)} disabled={locked} onChange={() => handleCheckboxChange(branch.id)} className="h-4 w-4 rounded text-cyan-600" /><span className="font-semibold text-slate-900">{branch.nombre}</span>{branch.id === activeBranchId && <span className="ml-auto text-[9px] font-black uppercase text-cyan-700">Activa</span>}</label>; })}</div>
         </div>
 
-        <div className="space-y-2 pt-2 border-t border-slate-100">
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-            Sedes habilitadas para acceso
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {sucursales.map((s) => (
-              <label key={s.id} className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition">
-                <input type="checkbox" checked={selectedSucursales.includes(s.id)} onChange={() => handleCheckboxChange(s.id)} className="rounded text-cyan-600 focus:ring-cyan-500 h-4 w-4" />
-                <span className="font-semibold text-slate-900">{s.nombre}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <Link href="/dashboard/clientes" className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
-            Cancelar
-          </Link>
-          <button type="submit" disabled={loading} className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs disabled:opacity-50 transition">
-            <Save className="h-3.5 w-3.5" />
-            <span>{loading ? "Guardando socio..." : "Crear socio"}</span>
-          </button>
-        </div>
+        <div className="flex items-center justify-between border-t border-slate-100 pt-4"><Link href="/dashboard/clientes" className="px-3 py-2 text-xs font-semibold text-slate-600">Cancelar</Link><button type="submit" disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-black text-white disabled:opacity-50"><Save className="h-3.5 w-3.5" />{loading ? "Guardando socio…" : "Crear socio"}</button></div>
       </form>
     </div>
   );
+}
+
+function Credential({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p><code className="mt-1 block text-sm font-black text-slate-950">{value}</code></div>;
+}
+
+function Input({ label, name, placeholder, type = "text", required = false, mono = false }: { label: string; name: string; placeholder: string; type?: string; required?: boolean; mono?: boolean }) {
+  return <label className="block font-bold text-slate-700">{label}<input type={type} name={name} required={required} placeholder={placeholder} className={`mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 ${mono ? "font-mono" : ""}`} /></label>;
 }
