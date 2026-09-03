@@ -1,7 +1,14 @@
 // OnlyGym PWA Service Worker
-const CACHE_NAME = "onlygym-static-v2";
+const CACHE_NAME = "onlygym-static-v3";
 const OFFLINE_URL = "/offline.html";
-const PRECACHE_ASSETS = [OFFLINE_URL, "/manifest.json", "/manifest.webmanifest", "/icon.svg"];
+const PRECACHE_ASSETS = [
+  OFFLINE_URL,
+  "/manifest.json",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS)));
@@ -32,11 +39,7 @@ self.addEventListener("fetch", (event) => {
 
   const isStaticAsset =
     url.pathname.startsWith("/_next/static/") ||
-    url.pathname === "/icon.svg" ||
-    url.pathname === "/manifest.json" ||
-    url.pathname === "/manifest.webmanifest" ||
-    url.pathname === OFFLINE_URL;
-
+    PRECACHE_ASSETS.includes(url.pathname);
   if (!isStaticAsset) return;
 
   event.respondWith(
@@ -67,8 +70,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "OnlyGym", {
       body: data.body || "Tenés una nueva notificación.",
-      icon: "/icon.svg",
-      badge: "/icon.svg",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       data: { url: requestedPath },
       tag: data.tag || undefined,
       renotify: Boolean(data.tag),
