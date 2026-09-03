@@ -67,7 +67,6 @@ function revalidateMemberPaths(clienteId?: number) {
   revalidatePath("/portal/dashboard");
 }
 
-/** Obtiene socios visibles en la sede activa. */
 export async function getClientes() {
   try {
     const context = await requireMemberContext();
@@ -82,11 +81,6 @@ export async function getClientes() {
   }
 }
 
-/**
- * Obtiene socios de la sede activa con paginación, filtros avanzados y estado de membresía en tiempo real.
- * La paginación se aplica después de calcular el estado de la última membresía para que
- * los filtros y totales sean coherentes entre páginas.
- */
 export async function getClientesPaginados(params: {
   page?: number;
   limit?: number;
@@ -169,6 +163,7 @@ export async function getClientesPaginados(params: {
     if (params.estado === "al_dia") filteredItems = filteredItems.filter((item) => item.estadoMembresia === "AL_DIA");
     else if (params.estado === "vencido") filteredItems = filteredItems.filter((item) => item.estadoMembresia === "VENCIDO" && item.fechaVencimiento !== null);
     else if (params.estado === "vencen_pronto") filteredItems = filteredItems.filter((item) => item.estadoMembresia === "AL_DIA" && item.vencenPronto);
+    else if (params.estado === "sin_membresia") filteredItems = filteredItems.filter((item) => item.fechaVencimiento === null);
 
     const total = filteredItems.length;
     const totalPages = Math.ceil(total / limit) || 1;
@@ -188,7 +183,6 @@ export async function getClientesPaginados(params: {
   }
 }
 
-/** Crea un socio con acceso al portal y cuenta corriente sin crédito preautorizado. */
 export async function createCliente(data: ClienteData) {
   const parsed = clienteSchema.safeParse(data);
   if (!parsed.success) {
@@ -258,8 +252,7 @@ export async function createCliente(data: ClienteData) {
   }
 }
 
-/** Actualiza datos del socio visible en la sede activa y mantiene sincronizado su usuario si cambia el DNI. */
-export async function updateCliente(id: number, data: Partial<ClienteData> & { foto?: string | null }) {
+export async function updateCliente(id: number, data: z.input<typeof memberUpdateSchema>) {
   const parsed = memberUpdateSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: parsed.error.issues.map((issue) => issue.message).join(", ") };
 
@@ -307,7 +300,6 @@ export async function updateCliente(id: number, data: Partial<ClienteData> & { f
   }
 }
 
-/** Obtiene la ficha 360 respetando cartera del entrenador o sede activa del equipo administrativo. */
 export async function getCliente(id: number) {
   try {
     const context = await requireStaffContext({ roles: MEMBER_VIEW_ROLES });
@@ -345,7 +337,6 @@ export async function getCliente(id: number) {
   }
 }
 
-/** Genera una nueva contraseña temporal y cierra las sesiones previas del socio de la sede activa. */
 export async function resetPasswordCliente(clienteId: number) {
   try {
     const context = await requireStaffContext({ roles: [RolTenant.OWNER, RolTenant.ADMIN] });
@@ -381,7 +372,6 @@ export async function resetPasswordCliente(clienteId: number) {
   }
 }
 
-/** Activa o desactiva un socio usando su estado real en servidor. */
 export async function toggleClienteEstado(id: number, _estadoActual?: string) {
   try {
     const context = await requireMemberContext();
@@ -408,7 +398,6 @@ export async function toggleClienteEstado(id: number, _estadoActual?: string) {
   }
 }
 
-/** Exporta únicamente los socios visibles en la sede activa. */
 export async function exportarClientesData(sucursalId?: number) {
   try {
     const context = await requireMemberContext(sucursalId);
