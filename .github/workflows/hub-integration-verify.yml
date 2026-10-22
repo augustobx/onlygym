@@ -1,0 +1,36 @@
+name: Validate NanoLabs integration without database access
+on:
+  push:
+    branches: [feat/nanolabs-hub-readonly-v1]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  integration-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Generate Prisma client offline
+        run: npx prisma generate
+        env:
+          DATABASE_URL: mysql://readonly_placeholder:invalid@127.0.0.1:3306/ci_placeholder
+      - name: TypeScript typecheck (no DB operations)
+        run: npx tsc --noEmit
+      - name: Assert integration is read-only and requires authentication
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const file = "src/app/api/integrations/nanolabs/tenants/route.ts";
+          const body = fs.readFileSync(file, 'utf8');
+          if (!body.includes('timingSafeEqual') || !body.includes('tenant.findMany') || !body.includes('HUB_INTEGRATION_TOKEN')) throw Error('Hub integration contract missing security/read-only primitives');
+          if (/\.(?:update|create|delete|upsert|executeRaw|queryRaw)\s*\(/i.test(body)) throw Error('Mutation or raw SQL found in Hub read endpoint');
+          console.log('Readonly integration source assertions passed');
+          NODE
