@@ -65,7 +65,10 @@ services:
       target: runner
     container_name: onlygym-web
     restart: unless-stopped
-    environment: *app_environment
+    environment:
+      <<: *app_environment
+      # Hub token is intentionally excluded from the migration/bootstrap service.
+      HUB_INTEGRATION_TOKEN: ${HUB_INTEGRATION_TOKEN:-}
     volumes:
       - onlygym_progress_photos:/app/data/progress-photos
     networks:
