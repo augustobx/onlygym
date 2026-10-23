@@ -69,6 +69,8 @@ services:
       <<: *app_environment
       # Hub token is intentionally excluded from the migration/bootstrap service.
       HUB_INTEGRATION_TOKEN: ${HUB_INTEGRATION_TOKEN:-}
+      HUB_MANAGEMENT_ENABLED: ${HUB_MANAGEMENT_ENABLED:-false}
+      HUB_MANAGEMENT_TOKEN: ${HUB_MANAGEMENT_TOKEN:-}
     volumes:
       - onlygym_progress_photos:/app/data/progress-photos
     networks:
@@ -97,3 +99,4 @@ networks:
 volumes:
   onlygym_pgdata:
   onlygym_progress_photos:
+

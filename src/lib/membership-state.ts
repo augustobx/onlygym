@@ -9,8 +9,8 @@ export type MembershipSnapshot = {
 
 const DAY_MS = 86_400_000;
 
-function utcCalendarDay(value: Date) {
-  return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+function calendarDay(value: Date) {
+  return Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
 export function membershipSnapshot(
@@ -37,7 +37,7 @@ export function membershipSnapshot(
 
   // "Vence en N días" es una diferencia de fechas calendario. Si hoy es 3 y
   // vence el 10, son 7 días aunque todavía falten algunas horas adicionales.
-  const calendarDiff = utcCalendarDay(expiration) - utcCalendarDay(now);
+  const calendarDiff = calendarDay(expiration) - calendarDay(now);
   const daysRemaining = Math.max(0, Math.round(calendarDiff / DAY_MS));
 
   return {
@@ -51,3 +51,4 @@ export function membershipSnapshot(
 export function isMembershipActive(expirationValue: string | Date | null | undefined, now: Date = new Date()) {
   return membershipSnapshot(expirationValue, now).active;
 }
+
