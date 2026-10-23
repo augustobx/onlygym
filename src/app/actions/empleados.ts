@@ -3,6 +3,7 @@
 import { RolTenant } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertTenantCapacity } from "@/lib/tenant-capacity";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext } from "@/lib/tenant-context";
 import { writeAudit } from "@/lib/audit";
@@ -141,6 +142,7 @@ export async function updateEmpleado(id: string, data: EmployeeUpdate) {
       && owned.user.tenantMemberships.length <= 1;
 
     await prisma.$transaction(async (tx) => {
+      if (nextState === "activo" && owned.estado !== "activo") await assertTenantCapacity(tx, context.tenantId, "users");
       if (requestedName && requestedName !== owned.user.name) {
         await tx.user.update({ where: { id }, data: { name: requestedName } });
       }
@@ -206,3 +208,4 @@ export async function toggleEmpleadoEstado(id: string, _estadoActual?: string) {
     return { success: false, error: error instanceof Error ? error.message : "Error cambiando estado" };
   }
 }
+

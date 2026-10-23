@@ -167,12 +167,14 @@ export async function setActiveBranchCookie(branchId: number) {
 }
 
 export async function getTenantModules(tenantId: number) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { modulos: true } });
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { modulos: true, planSaaS: { select: { modulos: true } } } });
   const configured = tenant?.modulos && typeof tenant.modulos === "object" && !Array.isArray(tenant.modulos)
     ? tenant.modulos as Record<string, unknown>
     : {};
+  const plan = tenant?.planSaaS?.modulos && typeof tenant.planSaaS.modulos === "object" && !Array.isArray(tenant.planSaaS.modulos)
+    ? tenant.planSaaS.modulos as Record<string, unknown> : {};
   return Object.fromEntries(
-    Object.entries(DEFAULT_MODULES).map(([key, defaultValue]) => [key, typeof configured[key] === "boolean" ? configured[key] : defaultValue]),
+    Object.entries(DEFAULT_MODULES).map(([key, defaultValue]) => [key, typeof configured[key] === "boolean" ? configured[key] : typeof plan[key] === "boolean" ? plan[key] : defaultValue]),
   ) as Record<TenantModule, boolean>;
 }
 
@@ -180,3 +182,4 @@ export async function requireTenantModule(tenantId: number, module: TenantModule
   const modules = await getTenantModules(tenantId);
   if (!modules[module]) throw new AuthorizationError(`El módulo ${module} no está habilitado para este gimnasio`);
 }
+

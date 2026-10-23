@@ -30,7 +30,8 @@ export async function GET(req: Request) {
     const records = await prisma.tenant.findMany({
       skip: offset, take: 101,
       orderBy: [{ creadoEn: "desc" }, { id: "asc" }],
-      select: { id:true,slug:true,nombre:true,estado:true,creadoEn:true,plan:true },
+      select: { id:true,slug:true,nombre:true,estado:true,creadoEn:true,plan:true,actualizadoEn:true,fechaVencimiento:true,modulos:true,
+        planSaaS:{select:{nombre:true,modulos:true}},_count:{select:{clientes:true}} },
     });
     const page = records.slice(0, 100).map(t => ({
       id: String(t.id),
@@ -39,7 +40,14 @@ export async function GET(req: Request) {
       status: normalizeStatus(t.estado),
       rawStatus: String(t.estado),
       createdAt: t.creadoEn.toISOString(),
-      plan: t.plan,
+      plan: t.planSaaS?.nombre || t.plan,
+      version: t.actualizadoEn.toISOString(),
+      planExpiresAt: t.fechaVencimiento?.toISOString() ?? null,
+      modules: Object.fromEntries(["socios","membresias","accesos","caja","entrenamiento","clases","mediciones","puntos","reportes"].map(key=>{
+        const overrides=t.modulos as Record<string,unknown>|null,base=t.planSaaS?.modulos as Record<string,unknown>|null;
+        return [key,typeof overrides?.[key]==="boolean"?overrides[key]:typeof base?.[key]==="boolean"?base[key]:true];
+      })),
+      metrics: { totalRecords:t._count.clientes,recordLabel:"socios",available:true },
     }));
     return Response.json({
       success: true,
@@ -55,3 +63,4 @@ export async function GET(req: Request) {
     return Response.json({ success: false, error: "Tenant read unavailable" }, { status: 503, headers: HEADER });
   }
 }
+

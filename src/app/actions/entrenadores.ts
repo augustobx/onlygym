@@ -5,6 +5,7 @@ import { Prisma, RolTenant } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { assertTenantCapacity } from "@/lib/tenant-capacity";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext } from "@/lib/tenant-context";
 import { getStaffMemberScope } from "@/lib/staff-member-access";
@@ -57,6 +58,7 @@ export async function crearEntrenador(input: z.input<typeof createTrainerSchema>
     const data = createTrainerSchema.parse(input); const branches = await allowedBranches(context.tenantId, data.sucursalIds);
     const passwordText = temporaryPassword(); const password = await hashPassword(passwordText);
     const trainer = await prisma.$transaction(async (tx) => {
+      await assertTenantCapacity(tx, context.tenantId, "users");
       const user = await tx.user.create({ data: { name: data.name, email: data.email, username: data.username, displayUsername: data.username, emailVerified: true, nivel: "entrenador", estado: "activo", sucursales: { connect: branches.map(({ id }) => ({ id })) } } });
       await tx.account.create({ data: { accountId: user.id, providerId: "credential", userId: user.id, password, issuer: "local:credential" } });
       await tx.tenantUsuario.create({ data: { tenantId: context.tenantId, userId: user.id, rol: RolTenant.ENTRENADOR, estado: "activo" } });
@@ -156,10 +158,12 @@ export async function cambiarEstadoEntrenador(trainerId: number, activar: boolea
     const profile = await prisma.perfilEntrenador.findFirst({ where: { id, tenantId: context.tenantId }, select: { id: true, userId: true } });
     if (!profile) return { success: false, error: "Entrenador no encontrado" };
     const estado = activar ? "activo" : "inactivo";
-    await prisma.$transaction([
-      prisma.perfilEntrenador.update({ where: { id }, data: { estado } }),
-      prisma.tenantUsuario.update({ where: { tenantId_userId: { tenantId: context.tenantId, userId: profile.userId } }, data: { estado } }),
-    ]);
+    await prisma.$transaction(async tx => {
+      const membership = await tx.tenantUsuario.findUnique({ where: { tenantId_userId: { tenantId: context.tenantId, userId: profile.userId } }, select: { estado: true } });
+      if (activar && membership?.estado !== "activo") await assertTenantCapacity(tx, context.tenantId, "users");
+      await tx.perfilEntrenador.update({ where: { id }, data: { estado } });
+      await tx.tenantUsuario.update({ where: { tenantId_userId: { tenantId: context.tenantId, userId: profile.userId } }, data: { estado } });
+    });
     await writeAudit({ tenantId: context.tenantId, actorUserId: context.userId, accion: activar ? "entrenador.activar" : "entrenador.pausar", entidad: "PerfilEntrenador", entidadId: id });
     return { success: true };
   } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No se pudo cambiar el estado" }; }
@@ -199,3 +203,4 @@ export async function getSocioEntrenadorDetalle(clienteId: number) {
     return { success: true, data: serializeData(member) };
   } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No se pudo cargar el socio" }; }
 }
+

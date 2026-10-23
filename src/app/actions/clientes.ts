@@ -9,6 +9,7 @@ import { writeAudit } from "@/lib/audit";
 import { assertActiveMemberBranch, resolveNewMemberBranches } from "@/lib/member-operations-policy";
 import { isMembershipActive, membershipSnapshot } from "@/lib/membership-state";
 import { prisma } from "@/lib/prisma";
+import { assertTenantCapacity } from "@/lib/tenant-capacity";
 import { clienteSchema, ClienteData } from "@/lib/schemas";
 import { serializeData } from "@/lib/serialize";
 import { getStaffMemberScope } from "@/lib/staff-member-access";
@@ -192,6 +193,7 @@ export async function createCliente(data: ClienteData) {
     const initialPassword = await hash(temporaryPassword, 12);
 
     const clienteCreado = await prisma.$transaction(async (tx) => {
+      if ((parsed.data.estado || "activo") === "activo") await assertTenantCapacity(tx, context.tenantId, "members");
       const cliente = await tx.cliente.create({
         data: {
           tenantId: context.tenantId,
@@ -248,12 +250,13 @@ export async function updateCliente(id: number, data: z.input<typeof memberUpdat
   try {
     const context = await requireMemberContext();
     const scope = activeBranchMemberScope(context);
-    const current = await prisma.cliente.findFirst({ where: { ...scope, id }, select: { id: true, documento: true } });
+    const current = await prisma.cliente.findFirst({ where: { ...scope, id }, select: { id: true, documento: true, estado: true } });
     if (!current) return { success: false, error: "Socio no encontrado en la sede activa" };
 
     const values = parsed.data;
     const nextDocument = values.documento?.trim() || current.documento;
     const updated = await prisma.$transaction(async (tx) => {
+      if (values.estado === "activo" && current.estado !== "activo") await assertTenantCapacity(tx, context.tenantId, "members");
       const member = await tx.cliente.update({
         where: { id: current.id },
         data: {
@@ -429,3 +432,4 @@ export async function exportarClientesData(sucursalId?: number) {
     return { success: false, error: expectedMemberError(error, "Error exportando socios") };
   }
 }
+

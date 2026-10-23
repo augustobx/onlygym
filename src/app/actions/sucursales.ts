@@ -3,6 +3,7 @@
 import { Prisma, RolTenant } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertTenantCapacity, lockTenantCapacity } from "@/lib/tenant-capacity";
 import { serializeData } from "@/lib/serialize";
 import { requireStaffContext } from "@/lib/tenant-context";
 import { writeAudit } from "@/lib/audit";
@@ -86,6 +87,7 @@ export async function createSucursal(data: { nombre: string; direccion?: string;
     const capacity = data.capacidadMaxima ?? 50;
 
     const nueva = await prisma.$transaction(async (tx) => {
+      await assertTenantCapacity(tx, context.tenantId, "branches");
       const branch = await tx.sucursal.create({
         data: {
           tenantId: context.tenantId,
@@ -181,12 +183,12 @@ export async function toggleSucursalEstado(id: number, _estadoActual?: string) {
     if (!owned) return { success: false, error: "Sucursal no encontrada" };
 
     const nuevoEstado = owned.estado === "activo" ? "inactivo" : "activo";
-    if (nuevoEstado === "inactivo") {
-      const activeCount = await prisma.sucursal.count({ where: { tenantId: context.tenantId, estado: "activo" } });
-      if (activeCount <= 1) return { success: false, error: "El gimnasio debe conservar al menos una sede activa" };
-    }
-
-    const updated = await prisma.sucursal.update({ where: { id: owned.id }, data: { estado: nuevoEstado } });
+    const updated = await prisma.$transaction(async tx => {
+      await lockTenantCapacity(tx, context.tenantId);
+      if (nuevoEstado === "activo") await assertTenantCapacity(tx, context.tenantId, "branches");
+      else if (await tx.sucursal.count({ where: { tenantId: context.tenantId, estado: "activo" } }) <= 1) throw new Error("El gimnasio debe conservar al menos una sede activa");
+      return tx.sucursal.update({ where: { id: owned.id }, data: { estado: nuevoEstado } });
+    });
     await writeAudit({
       tenantId: context.tenantId,
       actorUserId: context.userId,
@@ -201,3 +203,4 @@ export async function toggleSucursalEstado(id: number, _estadoActual?: string) {
     return { success: false, error: error instanceof Error ? error.message : "Error al cambiar estado de la sucursal" };
   }
 }
+
