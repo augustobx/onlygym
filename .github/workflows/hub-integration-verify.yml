@@ -24,6 +24,24 @@ jobs:
           DATABASE_URL: mysql://readonly_placeholder:invalid@127.0.0.1:3306/ci_placeholder
       - name: TypeScript typecheck (no DB operations)
         run: npx tsc --noEmit
+      - name: Validate Hub token is isolated to web service
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci_only
+          BETTER_AUTH_SECRET: ci_testing_secret
+          BETTER_AUTH_URL: https://onlygym.example.test
+          API_SECRET_KEY: ci_testing_api_key
+          HUB_INTEGRATION_TOKEN: ci_test_only_token_32_bytes_long_123456
+        run: |
+          docker compose -f docker-compose.prod.yml config --format json > /tmp/onlygym-compose.json
+          python3 - <<'PY'
+          import json
+          services=json.load(open("/tmp/onlygym-compose.json"))["services"]
+          assert services["web"]["environment"].get("HUB_INTEGRATION_TOKEN") == "ci_test_only_token_32_bytes_long_123456"
+          for name in ("db","migrate"):
+              assert "HUB_INTEGRATION_TOKEN" not in services[name].get("environment",{}), name
+          print("OnlyGym integration token scoped to web; migrator and DB excluded")
+          PY
       - name: Assert integration is read-only and requires authentication
         run: |
           node - <<'NODE'
